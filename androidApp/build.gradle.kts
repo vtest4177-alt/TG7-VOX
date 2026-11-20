@@ -252,7 +252,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.metrolist.music"
+        applicationId = "com.tgvox.music"
         minSdk = 24
         targetSdk = 37
         versionCode = 155
