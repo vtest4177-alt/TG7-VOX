@@ -291,7 +291,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            isShrinkResources = true
+            isShrinkResources = false
             ndk.debugSymbolLevel = "FULL"
             optimization.keepRules { ignoreFrom("com.materialkolor:material-kolor-android:5.0.1") }
             manifestPlaceholders["appLabel"] = "TG VOX"
@@ -350,7 +350,7 @@ android {
     }
 
     packaging {
-        dex.useLegacyPackaging = true
+        dex.useLegacyPackaging = false
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "META-INF/INDEX.LIST"
@@ -362,7 +362,7 @@ android {
         }
 
         jniLibs {
-            useLegacyPackaging = true
+            useLegacyPackaging = false
             keepDebugSymbols +=
                 setOf(
                     "**/libandroidx.graphics.path.so",

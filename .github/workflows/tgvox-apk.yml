@@ -27,7 +27,7 @@ jobs:
           java-version: '21'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
 
@@ -71,7 +71,7 @@ jobs:
           done
 
       - name: Upload TG-VOX APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TG-VOX-APK
           path: "**/build/outputs/apk/**/*.apk"
