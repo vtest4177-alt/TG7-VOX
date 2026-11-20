@@ -137,94 +137,18 @@ data class AboutContributor(
 object AboutContributors {
     val lead: AboutContributor =
         AboutContributor(
-            name = "Mo Agamy",
+            name = "TG7 ERROR",
             role = AboutContributorRole.CREATOR,
-            githubHandle = "mostafaalagamy",
-            sponsorUrl = "https://buymeacoffee.com/mostafaalagamy",
+            githubHandle = "tg7-error-official",
             avatarShape = AboutAvatarShape.COOKIE_9_SIDED,
-            favoriteSongVideoId = "Mh2JWGWvy_Y",
         )
 
-    val leads: List<AboutContributor> =
-        listOf(
-            AboutContributor(
-                name = "Lamp",
-                role = AboutContributorRole.DESKTOP_LEAD,
-                githubHandle = "l6t9",
-                websiteUrl = "https://lampu.dev",
-                sponsorUrl = "https://github.com/sponsors/l6t9",
-                avatarShape = AboutAvatarShape.COOKIE_9_SIDED,
-            ),
-            AboutContributor(
-                name = "Nyx",
-                role = AboutContributorRole.ANDROID_LEAD,
-                githubHandle = "nyxiereal",
-                websiteUrl = "https://nyx.meowery.eu",
-                sponsorUrl = "https://github.com/sponsors/nyxiereal",
-                avatarShape = AboutAvatarShape.COOKIE_9_SIDED,
-            ),
-        ).sortedBy { it.name.lowercase() }
 
-    val collaborators: List<AboutContributor> =
-        listOf(
-            AboutContributor(
-                name = "Adriel O'Connel",
-                role = AboutContributorRole.MULTIPLATFORM_DEVELOPMENT,
-                githubHandle = "adrielGGmotion",
-                sponsorUrl = "https://github.com/sponsors/adrielGGmotion",
-                avatarShape = AboutAvatarShape.COOKIE_4_SIDED,
-                favoriteSongVideoId = "m2zUrruKjDQ",
-            ),
-            AboutContributor(
-                name = "Show",
-                role = AboutContributorRole.ANDROID_DESIGNER,
-                githubHandle = "showtc",
-                avatarShape = AboutAvatarShape.COOKIE_6_SIDED,
-            ),
-            AboutContributor(
-                name = "Ibra Al Tabian",
-                role = AboutContributorRole.LYRICS_UI_SERVICES,
-                githubHandle = "ibratabian17",
-                sponsorUrl = "https://ko-fi.com/ibratabian17",
-                avatarShape = AboutAvatarShape.SUNNY,
-            ),
-            AboutContributor(
-                name = "Ismail Tiryaki",
-                role = AboutContributorRole.MULTIPLATFORM_DEVELOPMENT,
-                githubHandle = "isotjs",
-                websiteUrl = "https://ismailtiryaki.dev",
-                avatarShape = AboutAvatarShape.GEM,
-                favoriteSongVideoId = "NdAYM9Voudg",
-            ),
-            AboutContributor(
-                name = "Alessio Attilio",
-                role = AboutContributorRole.MULTIPLATFORM_DEVELOPMENT,
-                githubHandle = "kairosci",
-                websiteUrl = "https://kairosci.vercel.app",
-                sponsorUrl = "https://github.com/sponsors/kairosci",
-                avatarShape = AboutAvatarShape.COOKIE_6_SIDED,
-            ),
-            AboutContributor(
-                name = "Applxcake",
-                role = AboutContributorRole.MACOS_DEVELOPMENT,
-                githubHandle = "applxcake",
-                sponsorUrl = "https://github.com/sponsors/applxcake",
-                avatarShape = AboutAvatarShape.PUFFY_DIAMOND,
-            ),
-            AboutContributor(
-                name = "AlexxBytes",
-                role = AboutContributorRole.DESKTOP_DEVELOPMENT,
-                githubHandle = "alexxbytes",
-                sponsorUrl = "https://github.com/sponsors/alexxbytes",
-                avatarShape = AboutAvatarShape.COOKIE_4_SIDED,
-            ),
-            AboutContributor(
-                name = "Tryfle",
-                role = AboutContributorRole.MACOS_DEVELOPMENT,
-                githubHandle = "Tryflle",
-                avatarShape = AboutAvatarShape.BURST,
-            ),
-        ).sortedBy { it.name.lowercase() }
+    val leads: List<AboutContributor> = emptyList()
+
+
+    val collaborators: List<AboutContributor> = emptyList()
+
 
     val all: List<AboutContributor> = listOf(lead) + leads + collaborators
 }
@@ -243,13 +167,13 @@ data class AboutCommunityLink(
 
 val aboutCommunityLinks: List<AboutCommunityLink> =
     listOf(
-        AboutCommunityLink(AboutCommunityLinkKind.DISCORD, "https://discord.com/invite/zrdbeRG2Mt"),
-        AboutCommunityLink(AboutCommunityLinkKind.TELEGRAM, "https://t.me/metrolistapp"),
-        AboutCommunityLink(AboutCommunityLinkKind.REPOSITORY, "https://github.com/MetrolistGroup/Metrolist"),
+        AboutCommunityLink(AboutCommunityLinkKind.REPOSITORY, "https://github.com/vtest4177-alt/TG7-VOX"),
     )
 
+
 val aboutLicenseLink: AboutCommunityLink =
-    AboutCommunityLink(AboutCommunityLinkKind.LICENSE, "https://github.com/MetrolistGroup/Metrolist/blob/main/LICENSE")
+    AboutCommunityLink(AboutCommunityLinkKind.LICENSE, "https://github.com/vtest4177-alt/TG7-VOX/blob/main/LICENSE")
+
 
 data class AboutScreenText(
     val title: String,

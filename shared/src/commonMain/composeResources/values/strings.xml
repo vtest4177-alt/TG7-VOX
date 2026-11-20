@@ -9,7 +9,7 @@
     <!-- Bottom navigation -->
     <!-- Translators: Label for app name in the multiple app screens. -->
     <string name="app_name" translatable="false">TG VOX</string>
-    <string name="account_menu_license" translatable="false">GPL-3.0 MetrolistGroup</string>
+    <string name="account_menu_license" translatable="false">GPL-3.0 TG7 ERROR</string>
     <!-- Translators: Apple mobile platform name displayed in application information. -->
     <!-- Translators: Navigation label for home in the multiple app screens. -->
     <string name="home">Home</string>
@@ -721,7 +721,7 @@
     <!-- Translators: Label for credits desktop lead in the About screen. -->
     <string name="credits_desktop_lead">Lead desktop developer</string>
     <!-- Translators: Label for credits creator in the About screen. -->
-    <string name="credits_creator">Creator of Metrolist</string>
+    <string name="credits_creator">Creator of TG VOX</string>
     <!-- Translators: Heading for Rich Presence in the Discord integration. -->
     <string name="discord_rpc_title" translatable="false">Discord Rich Presence</string>
     <!-- Translators: Label for credits android developer in the About screen. -->
@@ -760,13 +760,13 @@
     <!-- Translators: Label for credits license name in the About screen. -->
     <string name="credits_license_name">License</string>
     <!-- Translators: Supporting text beneath the credits license option in the About screen. -->
-    <string name="credits_license_desc">Metrolist is licensed under GPL-3.0</string>
+    <string name="credits_license_desc">TG VOX by TG7 ERROR · Licensed under GPL-3.0</string>
     <!-- Translators: Confirmation prompt for wanna play favorite song; retained for translation compatibility but not currently referenced by app code. -->
     <!-- Translators: Message explaining yeah; retained for translation compatibility but not currently referenced by app code. -->
     <!-- Translators: Label for credits collaborators section in the About screen. -->
     <string name="credits_collaborators_section">Collaborators</string>
     <string name="credits_leads_section">Leads</string>
-    <string name="credits_creator_section">Creator</string>
+    <string name="credits_creator_section">Developer</string>
     <!-- Translators: Label for community and info in the About screen. -->
     <!-- Translators: Label for buy mo a coffee; retained for translation compatibility but not currently referenced by app code. -->
 
@@ -5087,7 +5087,7 @@
     <string name="import_error_playlist_tracks_unavailable">Could not load the playlist's tracks from %1$s. Export the playlist and paste the track list.</string>
     <string name="import_error_album_tracks_unavailable">Could not load the album's tracks from %1$s. Export the album and paste the track list.</string>
 <string name="audio_boost">Preamp</string>
-<string name="equalizer_usage_warning">The Metrolist team assumes no responsibility for your use of MetroEQ.</string>
+<string name="equalizer_usage_warning">TG VOX assumes no responsibility for your use of MetroEQ.</string>
 <string name="playlist_cover_updated">Playlist cover updated</string>
 <string name="playlist_cover_removed">Custom cover removed</string>
 <string name="login">Login</string>
@@ -5226,7 +5226,7 @@
     <string name="queue_youtube_history_paused_desc">Resume listen history to queue plays while offline</string>
     <string name="search_online_failed">Could not search online. Check your connection and try again.</string>
     <string name="search_load_more_failed">Could not load more results.</string>
-    <string name="discord_error_gateway_configuration">Discord rejected the connection configuration. Update Metrolist before trying again.</string>
+    <string name="discord_error_gateway_configuration">Discord rejected the connection configuration. Update TG VOX before trying again.</string>
     <string name="discord_preview_buttons_adjusted">Discord shortens long button labels and omits buttons whose links are too long. This preview shows the buttons that will be sent.</string>
     <string name="discord_presence_status_warning">When enabled, rich presence sends Online status to Discord. It may override Invisible or Do Not Disturb, including when playback stops.</string>
     <string name="discord_refresh_queued">Presence refresh queued.</string>
@@ -5274,7 +5274,7 @@
     <string name="crash_logs" translatable="false">Crash logs</string>
     <string name="crash_restart" translatable="false">Restart app</string>
     <string name="database_downgrade" translatable="false">Database downgrades are never supported because they would cause data loss. Install the newer version of Metrolist again.</string>
-    <string name="crash_imminent_title" translatable="false">Metrolist is about to crash</string>
+    <string name="crash_imminent_title" translatable="false">TG VOX is about to crash</string>
     <string name="crash_imminent_message" translatable="false">What would you like to do?</string>
     <string name="crash_let_it_crash" translatable="false">Let it crash</string>
     <string name="chip_content_description">%1$s, chip</string>
@@ -5480,7 +5480,7 @@
     <string name="settings_reset_download_folder_summary">Use the default folder for downloaded songs</string>
     <string name="settings_diagnostic_logs_summary">Read and copy the app's diagnostic log</string>
     <string name="settings_log_directory_summary">Browse saved log files in your file manager</string>
-    <string name="settings_check_releases_summary">Check GitHub for a newer Metrolist release</string>
+    <string name="settings_check_releases_summary">Check GitHub for a newer TG VOX release</string>
     <string name="settings_share_apk_summary">Share the installed app package as a file</string>
     <string name="settings_system_font_summary">Use the font supplied by your operating system</string>
     <string name="settings_thumbnail_shape_summary">Choose the shape of artwork in the expanded player</string>
