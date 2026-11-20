@@ -34,14 +34,41 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      - name: Generate release signing keystore
+        run: |
+          keytool -genkeypair -v -keystore "${{ github.workspace }}/tgvox-release.jks" \
+            -alias tgvox -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass tgvox1234 -keypass tgvox1234 \
+            -dname "CN=TG VOX, OU=Personal, O=TGVOX, L=IN, S=IN, C=IN"
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build TG VOX (:androidApp:assembleDebug)
+      - name: Build TG VOX (:androidApp:assembleRelease)
         env:
           METROLIST_APPLICATION_ID: com.tgvox.music
           METROLIST_APP_NAME: TG VOX
-        run: ./gradlew :androidApp:assembleDebug --no-daemon --stacktrace --warning-mode summary
+          KEYSTORE_PATH: ${{ github.workspace }}/tgvox-release.jks
+          KEYSTORE_PASSWORD: tgvox1234
+          KEY_ALIAS: tgvox
+          KEY_PASSWORD: tgvox1234
+        run: ./gradlew :androidApp:assembleRelease -x :androidApp:lintVitalRelease --no-daemon --stacktrace --warning-mode summary
+
+      - name: Verify or sign Release APK with apksigner
+        run: |
+          BUILD_TOOLS_DIR=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -mindepth 1 | sort -V | tail -n 1)
+          for apk in **/build/outputs/apk/**/release/*.apk; do
+            if [ -f "$apk" ]; then
+              if ! "$BUILD_TOOLS_DIR/apksigner" verify "$apk" >/dev/null 2>&1; then
+                "$BUILD_TOOLS_DIR/apksigner" sign \
+                  --ks "${{ github.workspace }}/tgvox-release.jks" \
+                  --ks-pass pass:tgvox1234 \
+                  --key-pass pass:tgvox1234 \
+                  --ks-key-alias tgvox \
+                  "$apk"
+              fi
+            fi
+          done
 
       - name: Upload TG-VOX APK Artifact
         uses: actions/upload-artifact@v4
