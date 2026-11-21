@@ -34,12 +34,19 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Generate release signing keystore
+      - name: Prepare release signing keystore
+        env:
+          TGVOX_KEYSTORE_BASE64: ${{ secrets.TGVOX_KEYSTORE_BASE64 }}
         run: |
-          keytool -genkeypair -v -keystore "$RUNNER_TEMP/tgvox-release.jks" \
-            -alias tgvox -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass tgvox1234 -keypass tgvox1234 \
-            -dname "CN=TG VOX, OU=Personal, O=TGVOX, L=IN, S=IN, C=IN"
+          if [ -n "$TGVOX_KEYSTORE_BASE64" ]; then
+            echo "$TGVOX_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/tgvox-release.jks"
+            echo "Using fixed persistent TG VOX signing key"
+          else
+            keytool -genkeypair -v -keystore "$RUNNER_TEMP/tgvox-release.jks" \
+              -alias tgvox -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass tgvox1234 -keypass tgvox1234 \
+              -dname "CN=TG VOX, OU=Personal, O=TG7 ERROR, L=IN, S=IN, C=IN"
+          fi
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew

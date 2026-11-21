@@ -9,7 +9,7 @@ build_dir="$root_dir/iosApp/build"
 derived_data_dir="$root_dir/iosApp/DerivedData"
 scheme="iosApp"
 project_path="$root_dir/iosApp/iosApp.xcodeproj"
-bundle_id="com.metrolist.MetrolistApp"
+bundle_id="com.tgvox.music"
 
 mode="sim"
 configuration="Debug"

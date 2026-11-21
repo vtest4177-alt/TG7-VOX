@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>Metrolist</string>
+    <string>TG VOX</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -27,6 +27,7 @@
             <string>Editor</string>
             <key>CFBundleURLSchemes</key>
             <array>
+                <string>tgvox</string>
                 <string>metrolist-auth</string>
                 <string>metrolist</string>
             </array>

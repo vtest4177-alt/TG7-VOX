@@ -1,0 +1,73 @@
+name: Build TG VOX iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+      - "tgvox*"
+
+concurrency:
+  group: tgvox-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    name: Package TG VOX iOS IPA
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      GRADLE_OPTS: >-
+        -Dorg.gradle.jvmargs="-XX:MaxRAMPercentage=60.0 -XX:+UseParallelGC -Dkotlin.daemon.jvm.options=-XX:MaxRAMPercentage=60.0"
+      ORG_GRADLE_PROJECT_org.gradle.workers.max: "2"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Prepare CI Gradle
+        uses: ./.github/actions/prepare-ci-gradle
+        with:
+          cache-scope: tgvox-ios-package
+          persist-configuration-cache: 'false'
+
+      - name: Verify Xcode device SDK
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+
+      - name: Fingerprint Kotlin Native toolchain
+        id: native-toolchain
+        shell: bash
+        run: |
+          echo "xcode=$(xcodebuild -version | shasum -a 256 | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          echo "kotlin=$(python3 -c 'import tomllib; print(tomllib.load(open("gradle/libs.versions.toml", "rb"))["versions"]["kotlin"])')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Kotlin Native
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-tgvox-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-toolchain.outputs.kotlin }}-${{ steps.native-toolchain.outputs.xcode }}
+
+      - name: Compile iOS release framework
+        env:
+          CONFIGURATION: Release
+        run: ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-configuration-cache
+
+      - name: Build TG VOX IPA
+        run: |
+          bash ./scripts/build_ios.sh --ipa
+          if [ -f "dist/Metrolist.ipa" ]; then
+            mv "dist/Metrolist.ipa" "dist/TG-VOX-iOS.ipa"
+          fi
+
+      - name: Upload TG-VOX iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TG-VOX-iOS-IPA
+          path: dist/*.ipa
+          if-no-files-found: error
+          retention-days: 7

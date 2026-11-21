@@ -3,8 +3,8 @@
 // Metrolist iOS App Scaffold Configuration
 //
 
-PRODUCT_NAME = Metrolist
-PRODUCT_BUNDLE_IDENTIFIER = com.metrolist.MetrolistApp
+PRODUCT_NAME = TGVOX
+PRODUCT_BUNDLE_IDENTIFIER = com.tgvox.music
 CODE_SIGN_ENTITLEMENTS = Configuration/iosApp.entitlements
 INFOPLIST_PREPROCESS = YES
 INFOPLIST_PREFIX_HEADER = $(DERIVED_FILE_DIR)/MetrolistVersion.h

@@ -139,9 +139,10 @@ object AboutContributors {
         AboutContributor(
             name = "TG7 ERROR",
             role = AboutContributorRole.CREATOR,
-            githubHandle = "tg7-error-official",
+            githubHandle = "vtest4177-alt",
             avatarShape = AboutAvatarShape.COOKIE_9_SIDED,
         )
+
 
 
 
@@ -149,7 +150,9 @@ object AboutContributors {
 
 
 
+
     val collaborators: List<AboutContributor> = emptyList()
+
 
 
 
@@ -175,8 +178,10 @@ val aboutCommunityLinks: List<AboutCommunityLink> =
 
 
 
+
 val aboutLicenseLink: AboutCommunityLink =
     AboutCommunityLink(AboutCommunityLinkKind.LICENSE, "https://github.com/vtest4177-alt/TG7-VOX/blob/main/LICENSE")
+
 
 
 
