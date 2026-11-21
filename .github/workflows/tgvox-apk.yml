@@ -2,6 +2,16 @@ name: Build TG VOX APK
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      release_tag:
+        type: string
+        required: false
+        default: ''
+      target_sha:
+        type: string
+        required: false
+        default: ''
   push:
     branches:
       - main
@@ -12,12 +22,13 @@ jobs:
   build-apk:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.target_sha || github.sha }}
           submodules: recursive
 
       - name: Set up JDK 21
@@ -47,6 +58,40 @@ jobs:
               -storepass tgvox1234 -keypass tgvox1234 \
               -dname "CN=TG VOX, OU=Personal, O=TG7 ERROR, L=IN, S=IN, C=IN"
           fi
+
+      - name: Prepare release tag and versionCode for in-place updates
+        id: relver
+        run: |
+          BASE_VER=$(grep -E '^appVersion=' gradle.properties | head -n1 | cut -d= -f2 | tr -d '\r\n' || true)
+          [ -z "$BASE_VER" ] && BASE_VER="14.0.1"
+          CLEAN_BASE=$(echo "$BASE_VER" | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          IFS='.' read -r MAJ MIN PAT <<< "$CLEAN_BASE"
+          TAG="${{ inputs.release_tag }}"
+          if [ -z "$TAG" ]; then
+            MAX_TAG_PAT=$(git ls-remote --tags origin "refs/tags/v${MAJ}.${MIN}.*" 2>/dev/null | sed -E "s#.*refs/tags/v${MAJ}\.${MIN}\.([0-9]+).*#\1#" | grep -E '^[0-9]+$' | sort -n | tail -n 1 || true)
+            CANDIDATE=$((PAT * 1000 + ${{ github.run_number }}))
+            if [ -n "$MAX_TAG_PAT" ] && [ "$MAX_TAG_PAT" -ge "$CANDIDATE" ]; then
+              FINAL_PAT=$((MAX_TAG_PAT + 1))
+            else
+              FINAL_PAT=$CANDIDATE
+            fi
+            TAG="v${MAJ}.${MIN}.${FINAL_PAT}"
+          fi
+          VER_NAME="${TAG#v}"
+          VER_PAT=$(echo "$VER_NAME" | awk -F. '{print $3}')
+          [ -z "$VER_PAT" ] && VER_PAT=1
+          TARGET_CODE=$((MAJ * 10000000 + MIN * 100000 + VER_PAT))
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version_name=$VER_NAME" >> "$GITHUB_OUTPUT"
+          if grep -q '^appVersion=' gradle.properties; then
+            sed -i.bak -E "s/^appVersion=.*/appVersion=$VER_NAME/" gradle.properties
+            rm -f gradle.properties.bak
+          fi
+          for gfile in androidApp/build.gradle.kts app/build.gradle.kts; do
+            if [ -f "$gfile" ]; then
+              python3 -c 'import re,sys;p,r,tc,v=sys.argv[1],int(sys.argv[2]),int(sys.argv[3]),sys.argv[4];s=open(p).read();s=re.sub(r"(versionCode\s*=\s*)(\d+)",lambda m:f"{m.group(1)}{max(int(m.group(2))+r,tc)}",s,count=1);s=re.sub(r"(versionName\s*=\s*\")([^\"]+)(\")",lambda m:f"{m.group(1)}{v}{m.group(3)}",s,count=1);open(p,"w").write(s)' "$gfile" "${{ github.run_number }}" "$TARGET_CODE" "$VER_NAME"
+            fi
+          done
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -82,3 +127,23 @@ jobs:
           name: TG-VOX-APK
           path: "**/build/outputs/apk/**/*.apk"
           if-no-files-found: error
+
+      - name: Publish TG-VOX APK to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.relver.outputs.tag }}
+          VER_NAME: ${{ steps.relver.outputs.version_name }}
+        run: |
+          mkdir -p dist
+          BUILT_APK=$(find . -path "*/build/outputs/apk/*" -name "*.apk" ! -name "*unsigned*" | head -n 1)
+          if [ -z "$BUILT_APK" ]; then
+            echo "No signed APK found to publish" >&2
+            exit 1
+          fi
+          cp "$BUILT_APK" "dist/TG-VOX.apk"
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --title "TG VOX $RELEASE_TAG" \
+              --notes "Automated TG VOX ($VER_NAME) build synced from upstream Metrolist using your fixed signing key."
+          fi
+          gh release upload "$RELEASE_TAG" "dist/TG-VOX.apk" --clobber

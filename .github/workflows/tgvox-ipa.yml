@@ -2,6 +2,16 @@ name: Build TG VOX iOS IPA
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      release_tag:
+        type: string
+        required: false
+        default: ''
+      target_sha:
+        type: string
+        required: false
+        default: ''
   push:
     branches:
       - main
@@ -17,12 +27,15 @@ jobs:
     name: Package TG VOX iOS IPA
     runs-on: macos-15
     timeout-minutes: 60
+    permissions:
+      contents: write
     env:
       ORG_GRADLE_PROJECT_org.gradle.workers.max: "1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.target_sha || github.sha }}
           submodules: recursive
           persist-credentials: false
 
@@ -41,9 +54,25 @@ jobs:
           cache-scope: tgvox-ios-package
           persist-configuration-cache: 'false'
 
+      - name: Sync iOS release version tag
+        id: iosver
+        run: |
+          TAG="${{ inputs.release_tag }}"
+          if [ -n "$TAG" ]; then
+            VER_NAME="${TAG#v}"
+            if grep -q '^appVersion=' gradle.properties; then
+              sed -i.bak -E "s/^appVersion=.*/appVersion=$VER_NAME/" gradle.properties
+              rm -f gradle.properties.bak
+            fi
+          fi
+
       - name: Tune Gradle memory for iOS klib compile
         run: |
-          sed -i.bak             -e 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx3328m -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC -Dfile.encoding=UTF-8/'             -e 's/^org\.gradle\.workers\.max=.*/org.gradle.workers.max=1/'             -e 's/^org\.gradle\.parallel=.*/org.gradle.parallel=false/'             gradle.properties
+          sed -i.bak \
+            -e 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx3328m -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC -Dfile.encoding=UTF-8/' \
+            -e 's/^org\.gradle\.workers\.max=.*/org.gradle.workers.max=1/' \
+            -e 's/^org\.gradle\.parallel=.*/org.gradle.parallel=false/' \
+            gradle.properties
           grep -q '^org\.gradle\.workers\.max=' gradle.properties || echo 'org.gradle.workers.max=1' >> gradle.properties
           grep -q '^org\.gradle\.parallel=' gradle.properties || echo 'org.gradle.parallel=false' >> gradle.properties
           rm -f gradle.properties.bak
@@ -74,7 +103,9 @@ jobs:
 
       - name: Tune Gradle memory for LLVM release link
         run: |
-          sed -i.bak             -e 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx2304m -XX:MaxMetaspaceSize=512m -XX:+UseParallelGC -Dfile.encoding=UTF-8/'             gradle.properties
+          sed -i.bak \
+            -e 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx2304m -XX:MaxMetaspaceSize=512m -XX:+UseParallelGC -Dfile.encoding=UTF-8/' \
+            gradle.properties
           rm -f gradle.properties.bak
           grep -E 'org\.gradle\.(jvmargs|workers\.max|parallel)' gradle.properties
 
@@ -101,3 +132,26 @@ jobs:
           path: dist/*.ipa
           if-no-files-found: error
           retention-days: 7
+
+      - name: Attach TG-VOX iOS IPA to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.release_tag }}
+        run: |
+          TAG="$INPUT_TAG"
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName' || true)
+          fi
+          if [ -z "$TAG" ]; then
+            BASE_VER=$(grep -E '^appVersion=' gradle.properties | head -n1 | cut -d= -f2 | tr -d '\r\n' || true)
+            [ -z "$BASE_VER" ] && BASE_VER="14.0.1"
+            CLEAN_BASE=$(echo "$BASE_VER" | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+            IFS='.' read -r MAJ MIN PAT <<< "$CLEAN_BASE"
+            TAG="v${MAJ}.${MIN}.$((PAT * 1000 + ${{ github.run_number }}))"
+          fi
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "TG VOX $TAG" \
+              --notes "Automated TG VOX iOS & Android build synced from upstream Metrolist."
+          fi
+          gh release upload "$TAG" "dist/TG-VOX-iOS.ipa" --clobber

@@ -1,0 +1,129 @@
+name: Auto-Sync Official Metrolist & Build TG VOX
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force_sync:
+        description: 'Force sync & rebuild even if upstream SHA matches'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Check Upstream & Re-Apply TG VOX
+    runs-on: ubuntu-latest
+    outputs:
+      updated: ${{ steps.sync_step.outputs.updated }}
+      release_tag: ${{ steps.sync_step.outputs.release_tag }}
+      synced_sha: ${{ steps.sync_step.outputs.synced_sha }}
+
+    steps:
+      - name: Checkout vtest4177-alt/TG7-VOX
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          token: ${{ github.token }}
+
+      - name: Sync upstream MetrolistGroup/Metrolist & preserve TG VOX
+        id: sync_step
+        run: |
+          set -euo pipefail
+          UPSTREAM_URL="https://github.com/MetrolistGroup/Metrolist.git"
+          LATEST_UPSTREAM_SHA=$(git ls-remote "$UPSTREAM_URL" "refs/heads/main" | awk '{print $1}')
+          LAST_SYNCED_SHA=""
+          if [ -f ".github/tgvox-upstream-sha" ]; then
+            LAST_SYNCED_SHA=$(tr -d '\r\n[:space:]' < .github/tgvox-upstream-sha)
+          fi
+
+          if [ -n "$LATEST_UPSTREAM_SHA" ] && [ "$LATEST_UPSTREAM_SHA" = "$LAST_SYNCED_SHA" ] && [ "${{ inputs.force_sync }}" != "true" ]; then
+            echo "Already synced with upstream $LATEST_UPSTREAM_SHA"
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "TG-VOX Auto-Sync Bot"
+          git config user.email "actions@users.noreply.github.com"
+
+          BACKUP_BRANCH="backup-sync-$(date -u +%Y%m%d-%H%M%S)"
+          git push origin "HEAD:refs/heads/$BACKUP_BRANCH"
+          echo "Saved safety backup branch: $BACKUP_BRANCH"
+
+          KEEP_DIR="$RUNNER_TEMP/tgvox-keep"
+          rm -rf "$KEEP_DIR"
+          mkdir -p "$KEEP_DIR/.github/workflows" "$KEEP_DIR/.github/scripts"
+
+          for f in .github/tgvox-config.json .github/scripts/reapply_tgvox.py ".github/workflows/tgvox-apk.yml" ".github/workflows/tgvox-ipa.yml" ".github/workflows/tgvox-auto-sync.yml"; do
+            [ -f "$f" ] && cp "$f" "$KEEP_DIR/$f"
+          done
+          cp .github/workflows/tgvox-* "$KEEP_DIR/.github/workflows/" 2>/dev/null || true
+
+          for res_dir in androidApp/src/main/res app/src/main/res; do
+            if [ -d "$res_dir" ]; then
+              mkdir -p "$KEEP_DIR/$res_dir"
+              cp -R "$res_dir"/mipmap-* "$KEEP_DIR/$res_dir/" 2>/dev/null || true
+            fi
+          done
+          if [ -f "iosApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png" ]; then
+            mkdir -p "$KEEP_DIR/iosApp/Assets.xcassets/AppIcon.appiconset"
+            cp "iosApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png" "$KEEP_DIR/iosApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+          fi
+
+          git fetch --depth=1 "$UPSTREAM_URL" "main"
+          git read-tree -u --reset FETCH_HEAD
+
+          cp -R "$KEEP_DIR"/. .
+          python3 .github/scripts/reapply_tgvox.py
+          echo "$LATEST_UPSTREAM_SHA" > .github/tgvox-upstream-sha
+
+          BASE_VER=$(grep -E '^appVersion=' gradle.properties | head -n1 | cut -d= -f2 | tr -d '\r\n' || true)
+          [ -z "$BASE_VER" ] && BASE_VER="14.0.1"
+          CLEAN_BASE=$(echo "$BASE_VER" | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          IFS='.' read -r MAJ MIN PAT <<< "$CLEAN_BASE"
+          MAX_TAG_PAT=$(git ls-remote --tags origin "refs/tags/v${MAJ}.${MIN}.*" 2>/dev/null | sed -E "s#.*refs/tags/v${MAJ}\.${MIN}\.([0-9]+).*#\1#" | grep -E '^[0-9]+$' | sort -n | tail -n 1 || true)
+          CANDIDATE=$((PAT * 1000 + ${{ github.run_number }}))
+          if [ -n "$MAX_TAG_PAT" ] && [ "$MAX_TAG_PAT" -ge "$CANDIDATE" ]; then
+            FINAL_PAT=$((MAX_TAG_PAT + 1))
+          else
+            FINAL_PAT=$CANDIDATE
+          fi
+          RELEASE_TAG="v${MAJ}.${MIN}.${FINAL_PAT}"
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No file delta after sync"
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git commit -m "chore: auto-sync MetrolistGroup/Metrolist & keep TG VOX branding"
+          git push origin "HEAD:main"
+
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "synced_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build-android:
+    name: Build Updated TG VOX APK
+    needs: sync
+    if: needs.sync.outputs.updated == 'true'
+    uses: ./.github/workflows/tgvox-apk.yml
+    with:
+      release_tag: ${{ needs.sync.outputs.release_tag }}
+      target_sha: ${{ needs.sync.outputs.synced_sha }}
+    secrets: inherit
+
+  build-ios:
+    name: Build Updated TG VOX iOS IPA
+    needs: sync
+    if: needs.sync.outputs.updated == 'true'
+    uses: ./.github/workflows/tgvox-ipa.yml
+    with:
+      release_tag: ${{ needs.sync.outputs.release_tag }}
+      target_sha: ${{ needs.sync.outputs.synced_sha }}
+    secrets: inherit

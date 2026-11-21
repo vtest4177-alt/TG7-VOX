@@ -1,0 +1,15 @@
+{
+  "appName": "TG VOX",
+  "developerName": "TG7 ERROR",
+  "developerGithub": "vtest4177-alt",
+  "soloDeveloperMode": true,
+  "applicationId": "com.tgvox.music",
+  "iosBundleId": "com.tgvox.music",
+  "versionSuffix": "-tgvox",
+  "forkRepo": "vtest4177-alt/TG7-VOX",
+  "forkBranch": "main",
+  "upstreamRepo": "MetrolistGroup/Metrolist",
+  "upstreamBranch": "main",
+  "enableGithubReleases": true,
+  "enableInAppForkUpdater": true
+}
