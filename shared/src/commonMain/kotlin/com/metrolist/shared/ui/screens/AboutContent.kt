@@ -151,6 +151,7 @@ object AboutContributors {
 
 
 
+
     val leads: List<AboutContributor> = emptyList()
 
 
@@ -161,7 +162,9 @@ object AboutContributors {
 
 
 
+
     val collaborators: List<AboutContributor> = emptyList()
+
 
 
 
@@ -199,8 +202,10 @@ val aboutCommunityLinks: List<AboutCommunityLink> =
 
 
 
+
 val aboutLicenseLink: AboutCommunityLink =
     AboutCommunityLink(AboutCommunityLinkKind.LICENSE, "https://github.com/vtest4177-alt/TG7-VOX/blob/main/LICENSE")
+
 
 
 
