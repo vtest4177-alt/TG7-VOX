@@ -16,11 +16,9 @@ jobs:
   build-ipa:
     name: Package TG VOX iOS IPA
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
-      GRADLE_OPTS: >-
-        -Dorg.gradle.jvmargs="-XX:MaxRAMPercentage=60.0 -XX:+UseParallelGC -Dkotlin.daemon.jvm.options=-XX:MaxRAMPercentage=60.0"
-      ORG_GRADLE_PROJECT_org.gradle.workers.max: "2"
+      ORG_GRADLE_PROJECT_org.gradle.workers.max: "1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -28,11 +26,23 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
+      - name: Free macOS runner disk space for iOS archive
+        run: |
+          xcrun simctl delete all || true
+          rm -rf ~/.rustup ~/.cargo ~/.dotnet /usr/local/share/powershell 2>/dev/null || true
+          df -h
+
       - name: Prepare CI Gradle
         uses: ./.github/actions/prepare-ci-gradle
         with:
           cache-scope: tgvox-ios-package
           persist-configuration-cache: 'false'
+
+      - name: Tune Gradle memory for 7GB macOS runner
+        run: |
+          sed -i.bak             -e 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx1792m -XX:MaxMetaspaceSize=512m -XX:+UseParallelGC -Dfile.encoding=UTF-8/'             -e 's/^org\.gradle\.workers\.max=.*/org.gradle.workers.max=1/'             gradle.properties
+          rm -f gradle.properties.bak
+          grep -E 'org\.gradle\.(jvmargs|workers\.max)' gradle.properties
 
       - name: Verify Xcode device SDK
         run: |
@@ -47,15 +57,22 @@ jobs:
           echo "kotlin=$(python3 -c 'import tomllib; print(tomllib.load(open("gradle/libs.versions.toml", "rb"))["versions"]["kotlin"])')" >> "$GITHUB_OUTPUT"
 
       - name: Cache Kotlin Native
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.konan
           key: konan-tgvox-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-toolchain.outputs.kotlin }}-${{ steps.native-toolchain.outputs.xcode }}
 
-      - name: Compile iOS release framework
+      - name: Compile iOS Kotlin klibs
+        run: |
+          ./gradlew :shared:compileKotlinIosArm64 --no-configuration-cache --max-workers=1 --stacktrace
+          ./gradlew --stop
+
+      - name: Link iOS release framework
         env:
           CONFIGURATION: Release
-        run: ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-configuration-cache
+        run: |
+          ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-configuration-cache --max-workers=1 --stacktrace
+          ./gradlew --stop
 
       - name: Build TG VOX IPA
         run: |
