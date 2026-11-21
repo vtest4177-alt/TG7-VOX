@@ -85,6 +85,12 @@ For example, Android's `ui/screens/HomeScreen.kt` uses the Android `HomeViewMode
 - Run the affected platform's [checks](checks.md). Format changed Kotlin with `ktlint --format` or the module's `ktlintFormat` task, then review the result.
 - Use Conventional Commits and `<type>/<short-kebab-case-description>` branch names. Do not bump `appVersion` in a feature or fix; it triggers releases.
 
+## PR disclosure
+
+Every PR body must include a visible `AI usage:` line naming all AI models used to author or modify its code or documentation, including later agent edits. Include model versions when known. An editor or agent name alone, such as Cursor or Codex, does not identify the model. Do not guess an identity that the tool does not expose. If no AI authored any changes, write `AI usage: No AI was used.`
+
+The [PR disclosure workflow](../.github/workflows/pr-ai-disclosure.yml) comments when the declaration is missing or unfilled and updates its existing comment when a declaration is provided. Do not approve or merge until the required disclosure is present and complete. The automated check verifies the declaration's presence, not whether the author named the models truthfully.
+
 ## Icons
 
 Gradient app icon sources live in `assets/app-icons/gradient/`. Its foreground, monochrome and full SVGs center the glyph in a 52 dp box on the 108 dp adaptive canvas, matching the visual size of Android's Original glyph. Render `foreground.svg` and `full.svg` with `rsvg-convert -w 512 -h 512`, then encode them as lossless WebP for Android's `drawable-nodpi` resources. Keep the Android monochrome vector's transform in sync with `monochrome.svg`. Render `full.svg` at 1024 px and convert it to an RGB PNG for iOS's `GRADIENT.appiconset/AppIcon.png`. Gradient is an optional Android and iOS icon; desktop has no alternate-icon selector.
@@ -185,7 +191,7 @@ Tapping a search result inside a playlist, album or stored collection queues the
 
 Start radio for the current song keeps its audio and position while replacing the queue. It resumes a paused song unless **Keep paused when changing songs** is on; the system media Start radio action always resumes it. While casting, the receiver keeps its playback state. A different seed starts from the beginning. On Android, Start radio turns repeat off so recommendations can populate the queue.
 
-With **Classic recommendations** enabled, radio asks `/next` with the video id alone instead of a generated playlist, keeps YouTube's recommendation order without skipping previously recommended songs, and serves the rest of a fetched page before requesting the next one. Continuations belong to the mode that fetched them; changing the setting mid-queue restarts the feed in the selected mode. Songs related to qualified plays are stored locally to feed Home Quick picks; seeds without a YouTube id, such as local files, skip that fetch.
+With **Classic recommendations** enabled, radio first asks `/next` with the video id alone and retries with the song's mix only if the response contains just the seed and has no continuation. It keeps YouTube's recommendation order without skipping previously recommended songs, and serves the rest of a fetched page before requesting the next one. Continuations belong to the mode that fetched them; changing the setting mid-queue restarts the feed in the selected mode. Songs related to qualified plays are stored locally to feed Home Quick picks; seeds without a YouTube id, such as local files, skip that fetch.
 
 Desktop manual Next can promote an already prepared successor with the chosen play/pause intent. Active crossfades and podcasts use ordinary advancement so cancellation and resume positions apply.
 
@@ -421,7 +427,7 @@ Android and desktop offer an opt-in **SponsorBlock (podcasts)** switch. Only ite
 
 Only stable releases offer Sentry reporting. Builds whose app version contains `+` build metadata, including nightlies, never initialize Sentry or send crashes, ANRs, sessions or playback reports. These builds hide Sentry consent in onboarding and Privacy settings and preserve the saved consent for stable releases. Local crash logs and manual report sharing remain available.
 
-Every platform passes reports and breadcrumbs through `redactDiagnosticText` and `redactDiagnosticUrl` in `beforeSend` and `beforeBreadcrumb`, removing credentials, tokens, cookies, query strings, long opaque path segments and IP addresses. Playback reports attach the last 200 playback events. Android and desktop report playback failures only after recovery is exhausted or a track cannot start. iOS releases are named `com.metrolist.ios@<appVersion>` because sideloaded builds get random bundle IDs, and release workflows upload dSYMs. iOS reports HTTP 5xx automatically only for HTTPS on port 443 to `metrolist.cc`, its subdomains and `metroserverx.meowery.eu`; see [HTTP client errors](https://docs.sentry.io/platforms/apple/configuration/http-client-errors/).
+Every platform passes reports and breadcrumbs through `redactDiagnosticText` and `redactDiagnosticUrl` in `beforeSend` and `beforeBreadcrumb`, removing credentials, tokens, cookies, query strings, long opaque path segments and IP addresses. Android and desktop send the last 200 playback events, capped at 65,536 characters, as a redacted [Sentry log](https://docs.sentry.io/platforms/java/logs/) with `playback.event_id` linking it to the error, instead of a file attachment. They report playback failures only after recovery is exhausted or a track cannot start. iOS releases are named `com.metrolist.ios@<appVersion>` because sideloaded builds get random bundle IDs, and release workflows upload dSYMs. iOS reports HTTP 5xx automatically only for HTTPS on port 443 to `metrolist.cc`, its subdomains and `metroserverx.meowery.eu`; see [HTTP client errors](https://docs.sentry.io/platforms/apple/configuration/http-client-errors/).
 
 ### Imports and scrobbling
 

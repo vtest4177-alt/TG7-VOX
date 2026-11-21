@@ -31,6 +31,8 @@ Live YouTube tests are opt-in and never run in CI. See [InnerTube live tests](in
 
 ## Manual checks
 
+The [PR disclosure workflow](../.github/workflows/pr-ai-disclosure.yml) checks the PR body when it opens or changes. It posts one reminder for a missing or unfilled `AI usage:` declaration and updates that comment after the author supplies one. This is a comment-only check; review must verify the model names before approval or merge. See [PR disclosure](development.md#pr-disclosure) for the required declaration.
+
 ### Focus and navigation
 
 On desktop, enable Floating search and open it with Ctrl+K and the search bar. The popup and scrim must appear, and typing must work without another click. Dismiss with Escape, an outside click and submission, then reopen. Toggle Ctrl+K rapidly and verify navigation works after closing. Repeat on Linux JVM and native builds; an invisible popup must not intercept input.
@@ -143,7 +145,7 @@ For player Back navigation on Android, start predictive Back with the portrait, 
 
 For Android TV player controls, open the mini-player with D-pad OK and confirm Play/Pause receives visible focus. Traverse and activate playback, like, share/menu, the audio/video switch, Queue, Lyrics and Cast when available in each style. Activate Sleep timer, Shuffle and Repeat from both the main player and queue menu, using the queue for Classic Shuffle. Both locations control the same playback state and open the timer dialog. Repeat in portrait, landscape and tablet layouts, with playback paused, playing and loading; check focus when returning from menus and collapsing/reopening the player.
 
-For Android music videos, check 16:9 playback in every mini-player style, pointer layouts, and portrait and landscape expanded-player artwork slots. These slots fill without top or bottom letterboxing. Fullscreen fits the complete video, with letterboxing on a 20:9 screen in landscape and portrait; check split-screen fullscreen too. Enter video fullscreen with Immersive player enabled and auto-rotate both on and off. Video fullscreen survives the rotation; immersive audio artwork keeps its landscape layout. Check track changes and the loading-artwork fade, plus portrait videos and PiP scaling.
+For Android music videos, check 16:9 playback in every mini-player style, pointer layouts, and portrait and landscape expanded-player artwork slots. Mini-player video fills its artwork slot. Expanded-player video keeps the complete frame, with the player background outside it and PiP/fullscreen buttons inside it. Fullscreen fits the complete video, with letterboxing on a 20:9 screen in landscape and portrait; check split-screen fullscreen too. Enter video fullscreen with Immersive player enabled and auto-rotate both on and off. Video fullscreen survives the rotation; immersive audio artwork keeps its landscape layout. Check track changes and the loading-artwork fade, plus portrait videos and PiP scaling. Switch from audio to video once while playing and paused. After a preparation or early stream failure, recovery must keep requesting video without another tap; cancelling the switch or changing tracks must discard the pending replacement.
 
 ### Queue
 

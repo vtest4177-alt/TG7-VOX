@@ -33,6 +33,7 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.headers
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.jvm.javaio.toInputStream
@@ -285,8 +286,7 @@ object DownloadManager {
         _downloadStates.value =
             loaded
                 .filter { entry ->
-                    isValidSongId(entry.songId) &&
-                        safePersistedFile(entry.audioFilePath)?.let { it.isFile && it.length() >= MIN_AUDIO_BYTES } == true
+                    isValidSongId(entry.songId) && availableDownloadAudio(entry) != null
                 }.associate { it.songId to DownloadState.DOWNLOADED }
         scope.launch {
             database?.let {
@@ -562,6 +562,12 @@ object DownloadManager {
                             if (response.status.value == 403 || response.status.value == 410) {
                                 throw IOException("HTTP ${response.status.value}: Stream URL expired")
                             }
+                            if (!isImage &&
+                                response.status == HttpStatusCode.ServiceUnavailable &&
+                                response.headers[HttpHeaders.RetryAfter] == null
+                            ) {
+                                throw IOException("HTTP 503: Audio temporarily unavailable")
+                            }
                             return@execute null
                         }
                         val range =
@@ -640,10 +646,10 @@ object DownloadManager {
 
     private fun getDownloadMetadata(songId: String): DownloadedFile? = _downloadedFiles.value.find { it.songId == songId }
 
-    fun getLocalAudioPath(songId: String): String? =
-        getDownloadMetadata(songId)?.let { metadata ->
-            safePersistedFile(metadata.audioFilePath)?.takeIf { it.isFile && it.length() >= MIN_AUDIO_BYTES }?.absolutePath
-        }
+    internal fun availableDownloadAudio(metadata: DownloadedFile): File? =
+        safePersistedFile(metadata.audioFilePath)?.takeIf { it.isFile && it.length() >= MIN_AUDIO_BYTES }
+
+    fun getLocalAudioPath(songId: String): String? = getDownloadMetadata(songId)?.let(::availableDownloadAudio)?.absolutePath
 
     suspend fun getLocalPlaybackResource(
         songId: String,
