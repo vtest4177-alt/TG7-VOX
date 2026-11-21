@@ -55,13 +55,18 @@ jobs:
           echo "Saved safety backup branch: $BACKUP_BRANCH"
 
           KEEP_DIR="$RUNNER_TEMP/tgvox-keep"
-          rm -rf "$KEEP_DIR"
-          mkdir -p "$KEEP_DIR/.github/workflows" "$KEEP_DIR/.github/scripts"
+          ORIG_WF_DIR="$RUNNER_TEMP/tgvox-orig-workflows"
+          rm -rf "$KEEP_DIR" "$ORIG_WF_DIR"
+          mkdir -p "$KEEP_DIR/.github/scripts"
 
-          for f in .github/tgvox-config.json .github/scripts/reapply_tgvox.py ".github/workflows/tgvox-apk.yml" ".github/workflows/tgvox-ipa.yml" ".github/workflows/tgvox-auto-sync.yml"; do
+          # Preserve .github/workflows verbatim from HEAD so GITHUB_TOKEN never attempts workflow changes (avoids permission rejection)
+          if [ -d ".github/workflows" ]; then
+            cp -R .github/workflows "$ORIG_WF_DIR"
+          fi
+
+          for f in .github/tgvox-config.json .github/scripts/reapply_tgvox.py; do
             [ -f "$f" ] && cp "$f" "$KEEP_DIR/$f"
           done
-          cp .github/workflows/tgvox-* "$KEEP_DIR/.github/workflows/" 2>/dev/null || true
 
           for res_dir in androidApp/src/main/res app/src/main/res; do
             if [ -d "$res_dir" ]; then
@@ -76,6 +81,12 @@ jobs:
 
           git fetch --depth=1 "$UPSTREAM_URL" "main"
           git read-tree -u --reset FETCH_HEAD
+
+          rm -rf .github/workflows
+          if [ -d "$ORIG_WF_DIR" ]; then
+            mkdir -p .github
+            cp -R "$ORIG_WF_DIR" .github/workflows
+          fi
 
           cp -R "$KEEP_DIR"/. .
           python3 .github/scripts/reapply_tgvox.py
@@ -107,16 +118,6 @@ jobs:
           echo "updated=true" >> "$GITHUB_OUTPUT"
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "synced_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-  build-android:
-    name: Build Updated TG VOX APK
-    needs: sync
-    if: needs.sync.outputs.updated == 'true'
-    uses: ./.github/workflows/tgvox-apk.yml
-    with:
-      release_tag: ${{ needs.sync.outputs.release_tag }}
-      target_sha: ${{ needs.sync.outputs.synced_sha }}
-    secrets: inherit
 
   build-ios:
     name: Build Updated TG VOX iOS IPA

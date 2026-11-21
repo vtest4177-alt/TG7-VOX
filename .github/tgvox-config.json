@@ -10,6 +10,7 @@
   "forkBranch": "main",
   "upstreamRepo": "MetrolistGroup/Metrolist",
   "upstreamBranch": "main",
+  "targetMode": "ios-only",
   "enableGithubReleases": true,
   "enableInAppForkUpdater": true
 }

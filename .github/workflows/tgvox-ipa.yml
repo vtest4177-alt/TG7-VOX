@@ -48,6 +48,14 @@ jobs:
           fi
           df -h
 
+      - name: Pre-flight verify iOS bundle & script integrity
+        run: |
+          bash -n scripts/build_ios.sh
+          bash scripts/ios_version.sh
+          test -f iosApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+          grep -E 'PRODUCT_BUNDLE_IDENTIFIER|PRODUCT_NAME' iosApp/Configuration/Config.xcconfig
+          grep -E '^bundle_id=' scripts/build_ios.sh
+
       - name: Prepare CI Gradle
         uses: ./.github/actions/prepare-ci-gradle
         with:
@@ -60,23 +68,34 @@ jobs:
           TAG="${{ inputs.release_tag }}"
           if [ -n "$TAG" ]; then
             VER_NAME="${TAG#v}"
-            if grep -q '^appVersion=' gradle.properties; then
+            if [[ "$VER_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9][A-Za-z0-9._-]*)?$ ]] && grep -q '^appVersion=' gradle.properties; then
               sed -i.bak -E "s/^appVersion=.*/appVersion=$VER_NAME/" gradle.properties
               rm -f gradle.properties.bak
             fi
           fi
 
-      - name: Tune Gradle memory for iOS klib compile
+      - name: Tune CI iOS memory & strip heavy debug linker flags
         run: |
+          if [ -f "shared/build.gradle.kts" ]; then
+            sed -i.bak '/-Xadd-light-debug=enable/d' shared/build.gradle.kts
+            rm -f shared/build.gradle.kts.bak
+          fi
+          if [ -f "iosApp/iosApp.xcodeproj/project.pbxproj" ]; then
+            sed -i.bak 's/DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";/DEBUG_INFORMATION_FORMAT = dwarf;/g' iosApp/iosApp.xcodeproj/project.pbxproj
+            sed -i.bak 's|./gradlew :shared:embedAndSignAppleFrameworkForXcode|./gradlew :shared:embedAndSignAppleFrameworkForXcode --no-daemon --no-configuration-cache --max-workers=1|g' iosApp/iosApp.xcodeproj/project.pbxproj
+            rm -f iosApp/iosApp.xcodeproj/project.pbxproj.bak
+          fi
           sed -i.bak \
-            -e 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx3328m -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC -Dfile.encoding=UTF-8/' \
+            -e 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC -Dfile.encoding=UTF-8/' \
             -e 's/^org\.gradle\.workers\.max=.*/org.gradle.workers.max=1/' \
             -e 's/^org\.gradle\.parallel=.*/org.gradle.parallel=false/' \
+            -e 's/^org\.gradle\.daemon=.*/org.gradle.daemon=false/' \
             gradle.properties
           grep -q '^org\.gradle\.workers\.max=' gradle.properties || echo 'org.gradle.workers.max=1' >> gradle.properties
           grep -q '^org\.gradle\.parallel=' gradle.properties || echo 'org.gradle.parallel=false' >> gradle.properties
+          grep -q '^org\.gradle\.daemon=' gradle.properties || echo 'org.gradle.daemon=false' >> gradle.properties
           rm -f gradle.properties.bak
-          grep -E 'org\.gradle\.(jvmargs|workers\.max|parallel)' gradle.properties
+          grep -E 'org\.gradle\.(jvmargs|workers\.max|parallel|daemon)' gradle.properties
 
       - name: Verify Xcode device SDK
         run: |
@@ -98,23 +117,26 @@ jobs:
 
       - name: Compile iOS Kotlin klibs
         run: |
-          ./gradlew :shared:compileKotlinIosArm64 --no-configuration-cache --max-workers=1 --stacktrace
-          ./gradlew --stop
+          ./gradlew :shared:compileKotlinIosArm64 --no-daemon --no-configuration-cache --max-workers=1 --stacktrace
+          pkill -f GradleDaemon || true
+          sudo purge || true
 
-      - name: Tune Gradle memory for LLVM release link
+      - name: Tune ultra-lean JVM for LLVM release link
         run: |
           sed -i.bak \
-            -e 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx2304m -XX:MaxMetaspaceSize=512m -XX:+UseParallelGC -Dfile.encoding=UTF-8/' \
+            -e 's/^org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m -XX:+UseSerialGC -Dfile.encoding=UTF-8/' \
+            -e 's/^org\.gradle\.daemon=.*/org.gradle.daemon=false/' \
             gradle.properties
           rm -f gradle.properties.bak
-          grep -E 'org\.gradle\.(jvmargs|workers\.max|parallel)' gradle.properties
+          grep -E 'org\.gradle\.(jvmargs|workers\.max|parallel|daemon)' gradle.properties
 
       - name: Link iOS release framework
         env:
           CONFIGURATION: Release
         run: |
-          ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-configuration-cache --max-workers=1 --stacktrace
-          ./gradlew --stop
+          ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-daemon --no-configuration-cache --max-workers=1 --stacktrace
+          pkill -f GradleDaemon || true
+          sudo purge || true
 
       - name: Build TG VOX IPA
         env:

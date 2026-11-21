@@ -196,6 +196,8 @@ def patch_ios(cfg: dict) -> None:
                 rf'\1\n                <string>{scheme}</string>',
                 text,
             )
+        if bundle and "com.metrolist.automatic-backup" in text:
+            text = text.replace("com.metrolist.automatic-backup", f"{bundle}.automatic-backup")
         if text != orig:
             plist.write_text(text, encoding="utf-8")
             print("Patched iosApp/Configuration/Info.plist")
@@ -234,13 +236,17 @@ def clean_conflicting_icons() -> None:
 
 def main() -> None:
     cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    patch_gradle(cfg)
+    target_mode = cfg.get("targetMode", "both")
+    if target_mode != "ios-only":
+        patch_gradle(cfg)
+        patch_manifest(cfg)
     patch_strings(cfg)
-    patch_manifest(cfg)
     patch_about(cfg)
     patch_updater(cfg)
-    patch_ios(cfg)
-    clean_conflicting_icons()
+    if target_mode != "android-only":
+        patch_ios(cfg)
+    if target_mode != "ios-only":
+        clean_conflicting_icons()
 
 
 if __name__ == "__main__":
