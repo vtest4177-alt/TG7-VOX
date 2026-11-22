@@ -144,10 +144,13 @@ object AboutContributors {
         )
 
 
+
     val leads: List<AboutContributor> = emptyList()
 
 
+
     val collaborators: List<AboutContributor> = emptyList()
+
 
 
     val all: List<AboutContributor> = listOf(lead) + leads + collaborators
@@ -167,13 +170,13 @@ data class AboutCommunityLink(
 
 val aboutCommunityLinks: List<AboutCommunityLink> =
     listOf(
-        AboutCommunityLink(AboutCommunityLinkKind.DISCORD, "https://discord.com/invite/zrdbeRG2Mt"),
-        AboutCommunityLink(AboutCommunityLinkKind.TELEGRAM, "https://t.me/metrolistapp"),
         AboutCommunityLink(AboutCommunityLinkKind.REPOSITORY, "https://github.com/vtest4177-alt/TG7-VOX"),
     )
 
+
 val aboutLicenseLink: AboutCommunityLink =
     AboutCommunityLink(AboutCommunityLinkKind.LICENSE, "https://github.com/vtest4177-alt/TG7-VOX/blob/main/LICENSE")
+
 
 data class AboutScreenText(
     val title: String,
