@@ -2,7 +2,7 @@ name: Auto-Sync Official Metrolist & Build TG VOX
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       force_sync:
@@ -119,11 +119,11 @@ jobs:
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "synced_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-  build-ios:
-    name: Build Updated TG VOX iOS IPA
+  build-android:
+    name: Build Updated TG VOX APK
     needs: sync
     if: needs.sync.outputs.updated == 'true'
-    uses: ./.github/workflows/tgvox-ipa.yml
+    uses: ./.github/workflows/tgvox-apk.yml
     with:
       release_tag: ${{ needs.sync.outputs.release_tag }}
       target_sha: ${{ needs.sync.outputs.synced_sha }}

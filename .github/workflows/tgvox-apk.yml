@@ -45,6 +45,12 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      - name: Apply full TG VOX branding across all locales
+        run: |
+          if [ -f ".github/scripts/reapply_tgvox.py" ]; then
+            python3 .github/scripts/reapply_tgvox.py
+          fi
+
       - name: Prepare release signing keystore
         env:
           TGVOX_KEYSTORE_BASE64: ${{ secrets.TGVOX_KEYSTORE_BASE64 }}
@@ -144,6 +150,6 @@ jobs:
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" \
               --title "TG VOX $RELEASE_TAG" \
-              --notes "Automated TG VOX ($VER_NAME) build synced from upstream Metrolist using your fixed signing key."
+              --notes "Automated TG VOX ($VER_NAME) Android Release build with full TG VOX branding & fixed signing key."
           fi
           gh release upload "$RELEASE_TAG" "dist/TG-VOX.apk" --clobber

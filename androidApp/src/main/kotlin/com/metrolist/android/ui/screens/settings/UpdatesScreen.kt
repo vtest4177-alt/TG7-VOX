@@ -310,9 +310,9 @@ private suspend fun shareInstalledApk(context: Context) {
             val now = System.currentTimeMillis()
             directory
                 .listFiles()
-                ?.filter { it.name.startsWith("metrolist-") && now - it.lastModified() > APK_SHARE_CACHE_MAX_AGE_MS }
+                ?.filter { it.name.startsWith("tg-vox-") && now - it.lastModified() > APK_SHARE_CACHE_MAX_AGE_MS }
                 ?.forEach(File::delete)
-            val destination = File.createTempFile("metrolist-", ".apk", directory)
+            val destination = File.createTempFile("tg-vox-", ".apk", directory)
             try {
                 sourceApk.copyTo(destination, overwrite = true)
                 FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", destination)

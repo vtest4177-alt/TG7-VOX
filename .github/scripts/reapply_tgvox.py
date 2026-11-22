@@ -42,11 +42,23 @@ def patch_gradle(cfg: dict) -> None:
 def patch_strings(cfg: dict) -> None:
     app_name = cfg["appName"]
     dev_name = cfg["developerName"]
-    candidates = [
-        ROOT / "shared/src/commonMain/composeResources/values/strings.xml",
-        ROOT / "androidApp/src/main/res/values/strings.xml",
-        ROOT / "app/src/main/res/values/strings.xml",
-    ]
+    esc_app = escape_xml(app_name)
+    primary_candidates = {
+        (ROOT / "shared/src/commonMain/composeResources/values/strings.xml").resolve(),
+        (ROOT / "androidApp/src/main/res/values/strings.xml").resolve(),
+        (ROOT / "app/src/main/res/values/strings.xml").resolve(),
+    }
+    all_string_files: list[Path] = []
+    for base_rel in (
+        "shared/src/commonMain/composeResources",
+        "androidApp/src/main/res",
+        "app/src/main/res",
+        "composeApp/src/commonMain/composeResources",
+    ):
+        base = ROOT / base_rel
+        if base.exists():
+            all_string_files.extend(sorted(base.glob("values*/strings.xml")))
+
     replacements = [
         ("app_name", app_name),
         ("credits_creator", f"Creator of {app_name}"),
@@ -58,18 +70,33 @@ def patch_strings(cfg: dict) -> None:
         ("crash_imminent_title", f"{app_name} is about to crash"),
         ("discord_error_gateway_configuration", f"Discord rejected the connection configuration. Update {app_name} before trying again."),
     ]
-    for p in candidates:
+    for p in all_string_files:
         if not p.exists():
             continue
         text = p.read_text(encoding="utf-8")
         orig = text
-        for key, val in replacements:
-            esc = escape_xml(val)
-            text = re.sub(
-                rf'(<string\s+name=["\']{key}["\'][^>]*>)[\s\S]*?(</string>)',
-                lambda m, e=esc: f"{m.group(1)}{e}{m.group(2)}",
-                text,
+        is_primary = p.resolve() in primary_candidates
+        if is_primary:
+            for key, val in replacements:
+                esc = escape_xml(val)
+                text = re.sub(
+                    rf'(<string\s+name=["\']{key}["\'][^>]*>)[\s\S]*?(</string>)',
+                    lambda m, e=esc: f"{m.group(1)}{e}{m.group(2)}",
+                    text,
+                )
+
+        def _scrub_tag(m: re.Match) -> str:
+            open_tag, body, close_tag = m.group(1), m.group(2), m.group(3)
+            if 'name="backup_filename_prefix"' in open_tag or "name='backup_filename_prefix'" in open_tag:
+                return m.group(0)
+            new_body = re.sub(
+                r'(\\[nt]|(?<![A-Za-z/]))Metro[Ll]ist(?:-KMP)?(?!Group)',
+                lambda mm, e=esc_app: f"{mm.group(1)}{e}",
+                body,
             )
+            return f"{open_tag}{new_body}{close_tag}"
+
+        text = re.sub(r'(<string\s+[^>]*>)([\s\S]*?)(</string>)', _scrub_tag, text)
         if text != orig:
             p.write_text(text, encoding="utf-8")
             print(f"Patched {p.relative_to(ROOT)}")
@@ -132,7 +159,10 @@ def patch_updater(cfg: dict) -> None:
     if not cfg.get("enableInAppForkUpdater", True):
         return
     repo = cfg["forkRepo"]
-    safe_apk = re.sub(r"[^a-zA-Z0-9_-]+", "-", cfg["appName"]) + ".apk"
+    safe_slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", cfg["appName"]) or "TG-VOX"
+    safe_agent = re.sub(r"[^a-zA-Z0-9_-]+", "", cfg["appName"]) or "TGVOX"
+    safe_lower = re.sub(r"[^a-z0-9]+", "-", cfg["appName"].lower()).strip("-") or "tg-vox"
+    safe_apk = f"{safe_slug}.apk"
     for p in ROOT.rglob("LatestRelease.kt"):
         text = p.read_text(encoding="utf-8")
         next_text = text.replace(
@@ -160,8 +190,18 @@ def patch_updater(cfg: dict) -> None:
                 rf'\1\n        "{safe_apk}",',
                 text,
             )
+        text = text.replace('"Metrolist/${BuildConfig.VERSION_NAME}"', f'"{safe_agent}/${{BuildConfig.VERSION_NAME}}"')
+        text = text.replace('"Metrolist-${release.version}.apk.part"', f'"{safe_slug}-${{release.version}}.apk.part"')
+        text = text.replace('"Metrolist-${release.version}.apk"', f'"{safe_slug}-${{release.version}}.apk"')
         if text != orig:
             p.write_text(text, encoding="utf-8")
+            print(f"Patched {p.relative_to(ROOT)}")
+
+    for p in ROOT.rglob("UpdatesScreen.kt"):
+        text = p.read_text(encoding="utf-8")
+        next_text = text.replace('"metrolist-"', f'"{safe_lower}-"')
+        if next_text != text:
+            p.write_text(next_text, encoding="utf-8")
             print(f"Patched {p.relative_to(ROOT)}")
 
 
