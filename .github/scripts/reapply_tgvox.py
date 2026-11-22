@@ -193,6 +193,159 @@ def patch_updater(cfg: dict) -> None:
         text = text.replace('"Metrolist/${BuildConfig.VERSION_NAME}"', f'"{safe_agent}/${{BuildConfig.VERSION_NAME}}"')
         text = text.replace('"Metrolist-${release.version}.apk.part"', f'"{safe_slug}-${{release.version}}.apk.part"')
         text = text.replace('"Metrolist-${release.version}.apk"', f'"{safe_slug}-${{release.version}}.apk"')
+        if "sharedOkHttpClient" in text and "retryOnConnectionFailure(true)" not in text:
+            if "import java.util.concurrent.TimeUnit" not in text:
+                text = re.sub(
+                    r"(import java\.io\.File\n)",
+                    r"\1import java.io.FileOutputStream\nimport java.util.concurrent.TimeUnit\n",
+                    text,
+                )
+            if "import kotlinx.coroutines.NonCancellable" not in text:
+                text = re.sub(
+                    r"(import kotlinx\.coroutines\.withContext\n)",
+                    r"import kotlinx.coroutines.NonCancellable\nimport kotlinx.coroutines.delay\n\1",
+                    text,
+                )
+            text = re.sub(
+                r"private val client =\s*\n\s*sharedOkHttpClient\s*\n\s*\.newBuilder\(\)\s*\n\s*\.build\(\)",
+                "private val client =\n        sharedOkHttpClient\n            .newBuilder()\n            .connectTimeout(30, TimeUnit.SECONDS)\n            .readTimeout(90, TimeUnit.SECONDS)\n            .writeTimeout(30, TimeUnit.SECONDS)\n            .callTimeout(0, TimeUnit.MILLISECONDS)\n            .retryOnConnectionFailure(true)\n            .build()",
+                text,
+            )
+            if "userCanceled" not in text:
+                text = re.sub(
+                    r"(@Volatile private var activeDownload: Call\? = null)",
+                    r"\1\n    @Volatile private var userCanceled = false",
+                    text,
+                )
+            dl_pat = re.compile(
+                r'    @SuppressLint\("UsableSpace"\)\s*\n\s*private suspend fun downloadOnce\([\s\S]*?\n    fun cancelDownload\(\)\s*\{\s*\n\s*activeDownload\?\.cancel\(\)\s*\n\s*\}'
+            )
+            if dl_pat.search(text):
+                replacement_dl = (
+                    '    @SuppressLint("UsableSpace")\n'
+                    '    private suspend fun downloadOnce(\n'
+                    '        context: Context,\n'
+                    '        release: GitHubRelease,\n'
+                    '        crashRecovery: Boolean,\n'
+                    '        skipVerification: Boolean,\n'
+                    '    ) = withContext(Dispatchers.IO + NonCancellable) {\n'
+                    '        var packageMismatch = false\n'
+                    '        operationMutex.withLock {\n'
+                    '            when (val active = mutableState.value) {\n'
+                    '                is AppUpdateState.Downloading -> if (active.release.updateKey == release.updateKey) return@withLock\n'
+                    '                is AppUpdateState.Downloaded -> if (active.release.updateKey == release.updateKey && active.file.isFile) return@withLock\n'
+                    '                else -> Unit\n'
+                    '            }\n'
+                    '            val asset = release.apk\n'
+                    '            if (asset == null) {\n'
+                    '                mutableState.value = AppUpdateState.Error(UpdateFailure.NO_APK, release)\n'
+                    '                return@withLock\n'
+                    '            }\n'
+                    '            userCanceled = false\n'
+                    '            runCatching {\n'
+                    '                check(asset.size in 1..MAX_APK_BYTES) { "Invalid update size" }\n'
+                    '                val updateDir = File(context.cacheDir, "updates").apply { mkdirs() }\n'
+                    '                updateDir.listFiles()?.forEach(File::delete)\n'
+                    f'                val partial = File(updateDir, "{safe_slug}-${{release.version}}.apk.part")\n'
+                    f'                val output = File(updateDir, "{safe_slug}-${{release.version}}.apk")\n'
+                    '                check(updateDir.usableSpace > asset.size + MIN_FREE_SPACE_BYTES) { "Insufficient space for update" }\n'
+                    '                var downloaded = 0L\n'
+                    '                var lastError: Throwable? = null\n'
+                    '                for (attempt in 0 until 4) {\n'
+                    '                    if (userCanceled) error("Download canceled")\n'
+                    '                    val resumeFrom = if (partial.isFile) partial.length().coerceIn(0L, asset.size) else 0L\n'
+                    '                    downloaded = resumeFrom\n'
+                    '                    if (downloaded == asset.size) {\n'
+                    '                        lastError = null\n'
+                    '                        break\n'
+                    '                    }\n'
+                    '                    val attemptResult =\n'
+                    '                        runCatching {\n'
+                    '                            val reqBuilder =\n'
+                    '                                Request\n'
+                    '                                    .Builder()\n'
+                    '                                    .url(asset.downloadUrl)\n'
+                    f'                                    .header("User-Agent", "{safe_agent}/${{BuildConfig.VERSION_NAME}}")\n'
+                    '                                    .header("Accept-Encoding", "identity")\n'
+                    '                            if (resumeFrom > 0L) {\n'
+                    '                                reqBuilder.header("Range", "bytes=$resumeFrom-")\n'
+                    '                            }\n'
+                    '                            val call = client.newCall(reqBuilder.build()).also { activeDownload = it }\n'
+                    '                            call.execute().use { response ->\n'
+                    '                                check(response.isSuccessful) { "Download returned ${response.code}" }\n'
+                    '                                val append = response.code == 206 && resumeFrom > 0L\n'
+                    '                                if (!append) downloaded = 0L\n'
+                    '                                val body = checkNotNull(response.body)\n'
+                    '                                val responseLength = body.contentLength()\n'
+                    '                                val expectedRemaining = if (append) asset.size - downloaded else asset.size\n'
+                    '                                if (responseLength >= 0 && responseLength != expectedRemaining) {\n'
+                    '                                    packageMismatch = true\n'
+                    '                                    error("Update response size mismatch")\n'
+                    '                                }\n'
+                    '                                val total = asset.size\n'
+                    '                                body.byteStream().use { input ->\n'
+                    '                                    FileOutputStream(partial, append).buffered().use { target ->\n'
+                    '                                        val buffer = ByteArray(32 * 1024)\n'
+                    '                                        while (true) {\n'
+                    '                                            if (userCanceled) error("Download canceled")\n'
+                    '                                            val count = input.read(buffer)\n'
+                    '                                            if (count < 0) break\n'
+                    '                                            if (downloaded + count > asset.size) packageMismatch = true\n'
+                    '                                            check(downloaded + count <= asset.size && downloaded + count <= MAX_APK_BYTES) {\n'
+                    '                                                "Update exceeded the expected size"\n'
+                    '                                            }\n'
+                    '                                            check(updateDir.usableSpace > count + MIN_FREE_SPACE_BYTES) { "Insufficient space for update" }\n'
+                    '                                            target.write(buffer, 0, count)\n'
+                    '                                            downloaded += count\n'
+                    '                                            val progress = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else 0\n'
+                    '                                            mutableState.value = AppUpdateState.Downloading(release, progress)\n'
+                    '                                        }\n'
+                    '                                        target.flush()\n'
+                    '                                    }\n'
+                    '                                }\n'
+                    '                            }\n'
+                    '                        }\n'
+                    '                    if (attemptResult.isSuccess && downloaded == asset.size) {\n'
+                    '                        lastError = null\n'
+                    '                        break\n'
+                    '                    }\n'
+                    '                    lastError = attemptResult.exceptionOrNull()\n'
+                    '                    if (userCanceled || packageMismatch) break\n'
+                    '                    if (attempt < 3) delay((attempt + 1) * 900L)\n'
+                    '                }\n'
+                    '                lastError?.let { throw it }\n'
+                    '                if (downloaded != asset.size || (!skipVerification && !verifyDigest(partial, asset.digest))) {\n'
+                    '                    packageMismatch = true\n'
+                    '                    partial.delete()\n'
+                    '                    mutableState.value = AppUpdateState.Error(UpdateFailure.DIGEST, release)\n'
+                    '                    return@runCatching\n'
+                    '                }\n'
+                    '                check(partial.renameTo(output)) { "Could not finalize update" }\n'
+                    '                if (!skipVerification && !verifyApkIdentity(context, output)) {\n'
+                    '                    output.delete()\n'
+                    '                    mutableState.value = AppUpdateState.Error(UpdateFailure.DIGEST, release)\n'
+                    '                    return@runCatching\n'
+                    '                }\n'
+                    '                if (!crashRecovery) Settings.shared.pendingUpdateReleaseJson = json.encodeToString(release)\n'
+                    '                mutableState.value = AppUpdateState.Downloaded(release, output, verified = !skipVerification)\n'
+                    '            }.onFailure {\n'
+                    '                mutableState.value =\n'
+                    '                    if (userCanceled || activeDownload?.isCanceled() == true) {\n'
+                    '                        AppUpdateState.Available(release)\n'
+                    '                    } else {\n'
+                    '                        AppUpdateState.Error(UpdateFailure.DOWNLOAD, release)\n'
+                    '                    }\n'
+                    '            }\n'
+                    '            activeDownload = null\n'
+                    '        }\n'
+                    '        packageMismatch\n'
+                    '    }\n\n'
+                    '    fun cancelDownload() {\n'
+                    '        userCanceled = true\n'
+                    '        activeDownload?.cancel()\n'
+                    '    }'
+                )
+                text = dl_pat.sub(lambda _m: replacement_dl, text, count=1)
         if text != orig:
             p.write_text(text, encoding="utf-8")
             print(f"Patched {p.relative_to(ROOT)}")

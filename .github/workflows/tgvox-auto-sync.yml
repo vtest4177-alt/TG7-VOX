@@ -2,7 +2,7 @@ name: Auto-Sync Official Metrolist & Build TG VOX
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 */2 * *'
   workflow_dispatch:
     inputs:
       force_sync:

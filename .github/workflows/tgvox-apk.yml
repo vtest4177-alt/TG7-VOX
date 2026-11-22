@@ -17,6 +17,15 @@ on:
       - main
       - master
       - "tgvox*"
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.github/tgvox-upstream-sha'
+      - '.github/workflows/tgvox-auto-sync.yml'
+
+concurrency:
+  group: tgvox-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-apk:

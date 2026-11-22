@@ -30,6 +30,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -38,6 +40,8 @@ import okhttp3.Call
 import okhttp3.Request
 import org.jetbrains.compose.resources.getString
 import java.io.File
+import java.io.FileOutputStream
+import java.util.concurrent.TimeUnit
 import java.security.MessageDigest
 
 @Serializable
@@ -130,6 +134,11 @@ object AppUpdateManager {
     private val client =
         sharedOkHttpClient
             .newBuilder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.MILLISECONDS)
+            .retryOnConnectionFailure(true)
             .build()
     private val json = Json { ignoreUnknownKeys = true }
     private val mutableState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
@@ -137,6 +146,7 @@ object AppUpdateManager {
     private val operationMutex = Mutex()
 
     @Volatile private var activeDownload: Call? = null
+    @Volatile private var userCanceled = false
 
     val state: StateFlow<AppUpdateState> = mutableState.asStateFlow()
     val releases: StateFlow<List<GitHubRelease>> = mutableReleases.asStateFlow()
@@ -284,7 +294,7 @@ object AppUpdateManager {
         release: GitHubRelease,
         crashRecovery: Boolean,
         skipVerification: Boolean,
-    ) = withContext(Dispatchers.IO) {
+    ) = withContext(Dispatchers.IO + NonCancellable) {
         var packageMismatch = false
         operationMutex.withLock {
             when (val active = mutableState.value) {
@@ -297,49 +307,79 @@ object AppUpdateManager {
                 mutableState.value = AppUpdateState.Error(UpdateFailure.NO_APK, release)
                 return@withLock
             }
+            userCanceled = false
             runCatching {
                 check(asset.size in 1..MAX_APK_BYTES) { "Invalid update size" }
                 val updateDir = File(context.cacheDir, "updates").apply { mkdirs() }
                 updateDir.listFiles()?.forEach(File::delete)
                 val partial = File(updateDir, "TG-VOX-${release.version}.apk.part")
                 val output = File(updateDir, "TG-VOX-${release.version}.apk")
-                val request =
-                    Request
-                        .Builder()
-                        .url(asset.downloadUrl)
-                        .header("User-Agent", "TGVOX/${BuildConfig.VERSION_NAME}")
-                        .build()
+                check(updateDir.usableSpace > asset.size + MIN_FREE_SPACE_BYTES) { "Insufficient space for update" }
                 var downloaded = 0L
-                val call = client.newCall(request).also { activeDownload = it }
-                call.execute().use { response ->
-                    check(response.isSuccessful) { "Download returned ${response.code}" }
-                    val body = checkNotNull(response.body)
-                    val responseLength = body.contentLength()
-                    if (responseLength >= 0 && responseLength != asset.size) {
-                        packageMismatch = true
-                        error("Update response size mismatch")
+                var lastError: Throwable? = null
+                for (attempt in 0 until 4) {
+                    if (userCanceled) error("Download canceled")
+                    val resumeFrom = if (partial.isFile) partial.length().coerceIn(0L, asset.size) else 0L
+                    downloaded = resumeFrom
+                    if (downloaded == asset.size) {
+                        lastError = null
+                        break
                     }
-                    check(updateDir.usableSpace > asset.size + MIN_FREE_SPACE_BYTES) { "Insufficient space for update" }
-                    val total = asset.size.takeIf { it > 0 } ?: body.contentLength()
-                    body.byteStream().use { input ->
-                        partial.outputStream().buffered().use { target ->
-                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                            while (true) {
-                                val count = input.read(buffer)
-                                if (count < 0) break
-                                if (downloaded + count > asset.size) packageMismatch = true
-                                check(downloaded + count <= asset.size && downloaded + count <= MAX_APK_BYTES) {
-                                    "Update exceeded the expected size"
+                    val attemptResult =
+                        runCatching {
+                            val reqBuilder =
+                                Request
+                                    .Builder()
+                                    .url(asset.downloadUrl)
+                                    .header("User-Agent", "TGVOX/${BuildConfig.VERSION_NAME}")
+                                    .header("Accept-Encoding", "identity")
+                            if (resumeFrom > 0L) {
+                                reqBuilder.header("Range", "bytes=$resumeFrom-")
+                            }
+                            val call = client.newCall(reqBuilder.build()).also { activeDownload = it }
+                            call.execute().use { response ->
+                                check(response.isSuccessful) { "Download returned ${response.code}" }
+                                val append = response.code == 206 && resumeFrom > 0L
+                                if (!append) downloaded = 0L
+                                val body = checkNotNull(response.body)
+                                val responseLength = body.contentLength()
+                                val expectedRemaining = if (append) asset.size - downloaded else asset.size
+                                if (responseLength >= 0 && responseLength != expectedRemaining) {
+                                    packageMismatch = true
+                                    error("Update response size mismatch")
                                 }
-                                check(updateDir.usableSpace > count + MIN_FREE_SPACE_BYTES) { "Insufficient space for update" }
-                                target.write(buffer, 0, count)
-                                downloaded += count
-                                val progress = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else 0
-                                mutableState.value = AppUpdateState.Downloading(release, progress)
+                                val total = asset.size
+                                body.byteStream().use { input ->
+                                    FileOutputStream(partial, append).buffered().use { target ->
+                                        val buffer = ByteArray(32 * 1024)
+                                        while (true) {
+                                            if (userCanceled) error("Download canceled")
+                                            val count = input.read(buffer)
+                                            if (count < 0) break
+                                            if (downloaded + count > asset.size) packageMismatch = true
+                                            check(downloaded + count <= asset.size && downloaded + count <= MAX_APK_BYTES) {
+                                                "Update exceeded the expected size"
+                                            }
+                                            check(updateDir.usableSpace > count + MIN_FREE_SPACE_BYTES) { "Insufficient space for update" }
+                                            target.write(buffer, 0, count)
+                                            downloaded += count
+                                            val progress = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else 0
+                                            mutableState.value = AppUpdateState.Downloading(release, progress)
+                                        }
+                                        target.flush()
+                                    }
+                                }
                             }
                         }
+                    if (attemptResult.isSuccess && downloaded == asset.size) {
+                        lastError = null
+                        break
                     }
+                    lastError = attemptResult.exceptionOrNull()
+                    if (userCanceled || packageMismatch) break
+                    if (attempt < 3) delay((attempt + 1) * 900L)
                 }
+                lastError?.let { throw it }
                 if (downloaded != asset.size || (!skipVerification && !verifyDigest(partial, asset.digest))) {
                     packageMismatch = true
                     partial.delete()
@@ -357,7 +397,7 @@ object AppUpdateManager {
                 mutableState.value = AppUpdateState.Downloaded(release, output, verified = !skipVerification)
             }.onFailure {
                 mutableState.value =
-                    if (activeDownload?.isCanceled() == true) {
+                    if (userCanceled || activeDownload?.isCanceled() == true) {
                         AppUpdateState.Available(release)
                     } else {
                         AppUpdateState.Error(UpdateFailure.DOWNLOAD, release)
@@ -369,6 +409,7 @@ object AppUpdateManager {
     }
 
     fun cancelDownload() {
+        userCanceled = true
         activeDownload?.cancel()
     }
 
