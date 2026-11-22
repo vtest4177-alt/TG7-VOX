@@ -261,7 +261,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.tgvox.music"
+        applicationId = "com.metrolist.music"
         minSdk = 24
         targetSdk = 37
         versionCode = 155
@@ -300,10 +300,10 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            isShrinkResources = false
+            isShrinkResources = true
             ndk.debugSymbolLevel = "FULL"
             optimization.keepRules { ignoreFrom("com.materialkolor:material-kolor-android:5.0.1") }
-            manifestPlaceholders["appLabel"] = "TG VOX"
+            manifestPlaceholders["appLabel"] = "Metrolist"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -326,7 +326,7 @@ android {
         }
         debug {
             applicationIdSuffix = ".debug"
-            manifestPlaceholders["appLabel"] = "TG VOX"
+            manifestPlaceholders["appLabel"] = "Metrolist KMP Debug"
         }
     }
 
@@ -359,7 +359,7 @@ android {
     }
 
     packaging {
-        dex.useLegacyPackaging = false
+        dex.useLegacyPackaging = true
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "META-INF/INDEX.LIST"
@@ -371,7 +371,7 @@ android {
         }
 
         jniLibs {
-            useLegacyPackaging = false
+            useLegacyPackaging = true
             keepDebugSymbols +=
                 setOf(
                     "**/libandroidx.graphics.path.so",
