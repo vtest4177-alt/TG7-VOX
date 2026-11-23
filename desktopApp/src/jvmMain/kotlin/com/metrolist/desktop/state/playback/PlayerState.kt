@@ -11,7 +11,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import com.metrolist.desktop.deviceconnect.DesktopDeviceConnect
 import com.metrolist.desktop.history.HistoryEntry
-import com.metrolist.desktop.history.HistoryRepository
 import com.metrolist.desktop.history.HistoryStat
 import com.metrolist.desktop.playback.PlaybackErrorReporter
 import com.metrolist.desktop.state.app.AppState
@@ -19,7 +18,6 @@ import com.metrolist.desktop.state.app.UiState
 import com.metrolist.desktop.state.auth.AuthState
 import com.metrolist.desktop.storage.DownloadManager
 import com.metrolist.desktop.storage.SongCacheManager
-import com.metrolist.desktop.utils.AppLogger
 import com.metrolist.desktop.utils.ComposeTrayManager
 import com.metrolist.desktop.window.playbackWindowVisibility
 import com.metrolist.innertubex.extraction.AudioQuality
@@ -578,45 +576,47 @@ object PlayerState {
                 applyDeviceConnectSnapshot(snapshot, positionMs, shouldCommit)
             }
 
-            override suspend fun setControllerPlayback(playback: DcLocalPlaybackState?) =
-                withContext(Dispatchers.Main) {
-                    if (playback != null) {
-                        if (externalReportingEnabled) return@withContext
-                        if (controllerPlayback == null) {
-                            beginPlaybackTransition(allowAutomaticCache = false)
-                            stopVideo()
-                        }
-                        isPlaybackResolving = !playback.ready
-                        if (controllerPlayback?.queue != playback.queue) {
-                            queue.restore(playback.queue)
-                            shuffleEnabled = playback.queue.isShuffled
-                            queueChanged()
-                        }
-                        localRepeatMode = RepeatMode.valueOf(playback.repeatMode.name)
-                        syncSession.applyPlayback(playback)
-                        syncSession.setReady(false)
-                        desiredPlayback.value = playback.playing
-                        val track = playback.queue.displayedItems.getOrNull(playback.queue.currentIndex)
-                        if (controllerPlayback?.queue?.displayedItems?.getOrNull(controllerPlayback?.queue?.currentIndex ?: -1) !=
-                            track
-                        ) {
-                            updateCurrentTrack(track)
-                        }
+            override suspend fun setControllerPlayback(
+                playback: DcLocalPlaybackState?,
+                provisional: Boolean,
+            ) = withContext(Dispatchers.Main) {
+                if (playback != null) {
+                    if (externalReportingEnabled) return@withContext
+                    if (controllerPlayback == null) {
+                        beginPlaybackTransition(allowAutomaticCache = false)
+                        stopVideo()
                     }
-                    if (playback == null && controllerPlayback != null) {
-                        isPlaybackResolving = false
-                        desiredPlayback.value = false
+                    isPlaybackResolving = !playback.ready
+                    if (controllerPlayback?.queue != playback.queue) {
+                        queue.restore(playback.queue)
+                        shuffleEnabled = playback.queue.isShuffled
+                        queueChanged()
                     }
-                    controllerPlayback = playback
-                    remoteVolume = playback?.volume
-                    volumeState.value = volume
-                    player.setControllerPlayback(playback)
-                    if (playback !=
-                        null
+                    localRepeatMode = RepeatMode.valueOf(playback.repeatMode.name)
+                    syncSession.applyPlayback(playback)
+                    syncSession.setReady(false)
+                    desiredPlayback.value = playback.playing
+                    val track = playback.queue.displayedItems.getOrNull(playback.queue.currentIndex)
+                    if (controllerPlayback?.queue?.displayedItems?.getOrNull(controllerPlayback?.queue?.currentIndex ?: -1) !=
+                        track
                     ) {
-                        scrobbleManager.setReportingEnabled(false, player.currentSong.value, playback.playing, playback.scrobbleSession)
+                        updateCurrentTrack(track)
                     }
                 }
+                if (playback == null && controllerPlayback != null) {
+                    isPlaybackResolving = false
+                    desiredPlayback.value = false
+                }
+                controllerPlayback = playback
+                remoteVolume = playback?.volume
+                volumeState.value = volume
+                player.setControllerPlayback(playback)
+                if (playback !=
+                    null
+                ) {
+                    scrobbleManager.setReportingEnabled(false, player.currentSong.value, playback.playing, playback.scrobbleSession)
+                }
+            }
 
             override suspend fun setPlaying(playing: Boolean) =
                 withContext(Dispatchers.Main) {
@@ -1334,10 +1334,6 @@ object PlayerState {
             SongMetadataState.revision.collectLatest {
                 currentTrack?.let { updateCurrentTrack(SongMetadataState.apply(it), startArtworkFetch = false) }
             }
-        }
-        scope.launch(Dispatchers.IO) {
-            runCatching { HistoryRepository.clearQueuedScrobbles() }
-                .onFailure { AppLogger.warning("PlayerState", "Failed to clear legacy queued scrobbles", it) }
         }
         scope.launch {
             snapshotFlow {

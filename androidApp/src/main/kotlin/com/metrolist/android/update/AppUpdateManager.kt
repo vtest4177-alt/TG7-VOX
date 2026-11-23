@@ -387,7 +387,6 @@ object AppUpdateManager {
                     return@runCatching
                 }
                 check(partial.renameTo(output)) { "Could not finalize update" }
-                // Android's installer still rejects an update signed by a different key.
                 if (!skipVerification && !verifyApkIdentity(context, output)) {
                     output.delete()
                     mutableState.value = AppUpdateState.Error(UpdateFailure.DIGEST, release)

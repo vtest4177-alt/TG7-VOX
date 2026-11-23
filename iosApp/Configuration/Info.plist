@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>TG VOX</string>
+    <string>Metrolist</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -27,7 +27,6 @@
             <string>Editor</string>
             <key>CFBundleURLSchemes</key>
             <array>
-                <string>tgvox</string>
                 <string>metrolist-auth</string>
                 <string>metrolist</string>
             </array>
@@ -53,7 +52,7 @@
     </array>
     <key>BGTaskSchedulerPermittedIdentifiers</key>
     <array>
-        <string>com.tgvox.music.automatic-backup</string>
+        <string>com.metrolist.automatic-backup</string>
     </array>
     <key>UILaunchScreen</key>
     <dict/>

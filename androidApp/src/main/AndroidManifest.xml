@@ -71,7 +71,7 @@
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="TG VOX"
+        android:label="${appLabel}"
         android:supportsRtl="true"
         android:enableOnBackInvokedCallback="true"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -249,7 +249,7 @@
             android:name=".MainActivityArcticHaze"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_arctic_haze"
+            android:icon="@mipmap/ic_launcher"
             android:label="${appLabel}"
             android:targetActivity="com.metrolist.android.MainActivity">
             <intent-filter>
@@ -267,7 +267,7 @@
             android:name=".MainActivityLavenderLeap"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_lavender_leap"
+            android:icon="@mipmap/ic_launcher"
             android:label="${appLabel}"
             android:targetActivity="com.metrolist.android.MainActivity">
             <intent-filter>
@@ -285,7 +285,7 @@
             android:name=".MainActivityMetromallow"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_metromallow"
+            android:icon="@mipmap/ic_launcher"
             android:label="${appLabel}"
             android:targetActivity="com.metrolist.android.MainActivity">
             <intent-filter>
@@ -303,7 +303,7 @@
             android:name=".MainActivityPrideSpecial"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_pride_special"
+            android:icon="@mipmap/ic_launcher"
             android:label="${appLabel}"
             android:targetActivity="com.metrolist.android.MainActivity">
             <intent-filter>
@@ -339,7 +339,7 @@
             android:name=".MainActivityKayeStatic"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_kaye_static"
+            android:icon="@mipmap/ic_launcher"
             android:label="${appLabel}"
             android:targetActivity="com.metrolist.android.MainActivity">
             <intent-filter>
@@ -357,7 +357,7 @@
             android:name=".MainActivityZenithBlack"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_zenith_black"
+            android:icon="@mipmap/ic_launcher"
             android:label="${appLabel}"
             android:targetActivity="com.metrolist.android.MainActivity">
             <intent-filter>
@@ -375,7 +375,7 @@
             android:name=".MainActivityZenithWhite"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_zenith_white"
+            android:icon="@mipmap/ic_launcher"
             android:label="${appLabel}"
             android:targetActivity="com.metrolist.android.MainActivity">
             <intent-filter>
@@ -393,7 +393,7 @@
             android:name=".MainActivityGradient"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_gradient"
+            android:icon="@mipmap/ic_launcher"
             android:label="${appLabel}"
             android:targetActivity="com.metrolist.android.MainActivity">
             <intent-filter>
@@ -569,7 +569,7 @@
         <service
             android:name="com.metrolist.android.quicksettings.MusicRecognizerTileService"
             android:exported="true"
-            android:icon="@drawable/ic_widget_mic"
+            android:icon="@mipmap/ic_launcher"
             android:label="@string/recognize_music"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
