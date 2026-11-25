@@ -27,6 +27,7 @@ import com.metrolist.shared.generated.resources.playlist_unavailable
 import com.metrolist.shared.model.RadioQueueChip
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.model.isLive
+import com.metrolist.shared.model.isPodcast
 import com.metrolist.shared.playback.MusicQueue
 import com.metrolist.shared.playback.MusicQueueSnapshot
 import com.metrolist.shared.playback.MusicQueueState
@@ -47,8 +48,10 @@ import com.metrolist.shared.youtube.playback.PlaybackResource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -58,6 +61,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -189,6 +194,10 @@ class PlayerConnection(
     }
 
     private var musicService: MusicService? = null
+    val playbackCommandGeneration: Long get() = musicService?.playbackCommandGeneration ?: 0L
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val playbackCommands: Flow<Long> get() = _isConnected.flatMapLatest { musicService?.playbackCommands ?: flowOf(0L) }
 
     private var queueUndo: QueueUndo? = null
     private var playlistRequestGeneration = 0L
@@ -682,7 +691,8 @@ class PlayerConnection(
                     DcPlaybackAction.REPLACE_QUEUE,
                     songs = listOf(song),
                     index = 0,
-                    finite = true,
+                    finite = !song.startsRadio,
+                    explicitRadioQueue = song.startsRadio,
                     positionMs = startPositionMs,
                 ),
             )
@@ -707,7 +717,14 @@ class PlayerConnection(
         startVideo: Boolean = false,
     ) {
         if (deferUntilConnected { playSongInternal(song, url, startPositionMs, startVideo) }) return
-        if (url.isBlank()) {
+        if (url.isBlank() && song.startsRadio) {
+            musicService?.playSongRadio(
+                song,
+                startPositionMs = startPositionMs,
+                startPlaying = localSongChangeStartsPlayback(),
+                startVideo = startVideo,
+            )
+        } else if (url.isBlank()) {
             musicService?.playQueue(
                 listOf(song),
                 finite = true,
@@ -719,6 +736,9 @@ class PlayerConnection(
             musicService?.player?.play(song, url, startPlaying = localSongChangeStartsPlayback())
         }
     }
+
+    // Podcast episodes and local files have no YouTube radio to follow them.
+    private val SongItem.startsRadio: Boolean get() = !isPodcast && !isLocal && !id.startsWith("local_")
 
     fun playNext(song: SongItem) {
         addToQueue(song, playNext = true)
@@ -770,6 +790,45 @@ class PlayerConnection(
         title: String,
         shuffle: Boolean = false,
     ) = playPagedCollection(title, shuffle) { GlobalYouTubeRepository.instance.getAlbumPlaybackPage(albumId) }
+
+    fun queuePlaylist(
+        playlistId: String,
+        playNext: Boolean,
+    ) = queueCollection(playNext) {
+        GlobalYouTubeRepository.instance.run {
+            completePlaylistPage(getPlaylistPlaybackPage(playlistId), applyContentFilters = false).songs
+        }
+    }
+
+    fun queueAlbum(
+        albumId: String,
+        playNext: Boolean,
+    ) = queueCollection(playNext) {
+        GlobalYouTubeRepository.instance
+            .getAlbum(albumId)
+            ?.songs
+            .orEmpty()
+    }
+
+    private fun queueCollection(
+        playNext: Boolean,
+        load: suspend () -> List<SongItem>,
+    ) {
+        scope.launch {
+            try {
+                val songs = BlockedContent.filterPlayableSongs(withContext(Dispatchers.IO) { load() })
+                if (songs.isEmpty()) {
+                    Toast.makeText(context, getString(Res.string.playlist_unavailable), Toast.LENGTH_SHORT).show()
+                } else {
+                    addToQueue(songs, playNext)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                Toast.makeText(context, getString(Res.string.error_unknown), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     private fun playPagedCollection(
         title: String,
@@ -952,7 +1011,7 @@ class PlayerConnection(
                     service.player.playbackStateFlow.value != Player.STATE_IDLE
             runWidgetPlaybackCommand(
                 needsPromotion = needsPromotion,
-                promote = service::promoteWidgetPlayback,
+                promote = service::promotePlaybackToForeground,
                 isCurrent = {
                     musicService === service && service.player.latestQueuePlaybackRequestId == requestId &&
                         service.playbackCommandGeneration == commandGeneration &&

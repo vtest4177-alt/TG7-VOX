@@ -1,10 +1,12 @@
 package com.metrolist.desktop.state.playback
 
 import androidx.compose.runtime.snapshotFlow
+import com.metrolist.desktop.deviceconnect.DesktopDeviceConnect
 import com.metrolist.desktop.state.app.UiState
 import com.metrolist.desktop.state.playback.PlayerState
 import com.metrolist.shared.cast.CastDevice
 import com.metrolist.shared.model.SongItem
+import com.metrolist.shared.model.isPodcast
 import com.metrolist.shared.model.playlistOccurrenceIdentity
 import com.metrolist.shared.ui.playback.PlaybackController
 import com.metrolist.shared.ui.playback.PlaybackListState
@@ -19,6 +21,23 @@ import kotlinx.coroutines.flow.stateIn
 class DesktopPlaybackController(
     scope: CoroutineScope,
 ) : PlaybackController {
+    override val playbackVolume = PlayerState.volumeState
+    override val playbackCommandGeneration: Long get() = PlayerState.explicitPlaybackGeneration
+    override val playbackCommands = PlayerState.playbackCommands
+    private val wrappedSharedPlayback =
+        ListenTogetherState.listenTogetherManager.let { manager ->
+            combine(manager.isInRoom, manager.roomRequestPending, manager.persistedRoomSession) { active, pending, persisted ->
+                active || pending || persisted
+            }
+        }
+    override val wrappedSoundtrackAllowed =
+        combine(
+            PlayerState.castManager.state,
+            wrappedSharedPlayback,
+            DesktopDeviceConnect.manager.remote.state,
+            snapshotFlow { PlayerState.sleepTimerEnabled || PlayerState.sleepTimerStopAfterCurrentSong },
+        ) { cast, shared, remote, timer -> !cast.isConnected && !shared && remote.sessionId == null && !timer }
+
     override val listState =
         combine(PlayerState.player.currentSong, PlayerState.player.isPlaying) { song, playing ->
             PlaybackListState(
@@ -77,7 +96,17 @@ class DesktopPlaybackController(
         song: SongItem,
         queue: List<SongItem>,
         songsOnly: Boolean,
-    ) = PlayerState.playTrack(song, queue.ifEmpty { listOf(song) }, songsOnly = songsOnly)
+    ) {
+        if (startsLoneRadio(song, queue, songsOnly)) return PlayerState.playSongRadio(song)
+        PlayerState.playTrack(song, queue.ifEmpty { listOf(song) }, songsOnly = songsOnly)
+    }
+
+    // A lone song starts its radio like Start radio; podcast episodes and local files have none.
+    private fun startsLoneRadio(
+        song: SongItem,
+        queue: List<SongItem>,
+        songsOnly: Boolean,
+    ): Boolean = queue.isEmpty() && !songsOnly && !song.isPodcast && !song.isLocal && !song.id.startsWith("local_")
 
     override fun playAtGeneration(
         expectedGeneration: Long,
@@ -86,6 +115,7 @@ class DesktopPlaybackController(
         songsOnly: Boolean,
     ) {
         if (explicitPlaybackGeneration != expectedGeneration) return
+        if (startsLoneRadio(song, queue, songsOnly)) return PlayerState.playSongRadio(song)
         val replacementGeneration = playbackReplacementGeneration
         PlayerState.playTrack(
             song,

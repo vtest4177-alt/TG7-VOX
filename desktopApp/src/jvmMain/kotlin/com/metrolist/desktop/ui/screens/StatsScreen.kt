@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.metrolist.desktop.history.HistoryRepository
@@ -24,9 +25,13 @@ import com.metrolist.desktop.ui.components.AlbumContextMenu
 import com.metrolist.desktop.ui.components.ArtistContextMenu
 import com.metrolist.desktop.ui.components.SongContextMenu
 import com.metrolist.desktop.utils.saveImage
+import com.metrolist.shared.api.lastfm.LastFmHistoryCache
 import com.metrolist.shared.db.HistoryAlbumStatistic
 import com.metrolist.shared.db.HistoryArtistStatistic
 import com.metrolist.shared.db.HistoryStatGroup
+import com.metrolist.shared.db.HistoryStatisticsSnapshot
+import com.metrolist.shared.db.MusicDatabase
+import com.metrolist.shared.db.isPlayable
 import com.metrolist.shared.generated.resources.Res
 import com.metrolist.shared.generated.resources.statistics_load_failed
 import com.metrolist.shared.generated.resources.statistics_save_image
@@ -38,6 +43,7 @@ import com.metrolist.shared.model.YTItem
 import com.metrolist.shared.state.GlobalYouTubeRepository
 import com.metrolist.shared.ui.menu.cursorContextMenu
 import com.metrolist.shared.ui.menu.rememberCursorContextMenuState
+import com.metrolist.shared.ui.playback.LocalPlaybackController
 import com.metrolist.shared.ui.screens.StatisticsItem
 import com.metrolist.shared.ui.screens.StatisticsPeriod
 import com.metrolist.shared.ui.screens.StatisticsScreen
@@ -48,12 +54,14 @@ import com.metrolist.shared.ui.statistics.StatisticsPeriodMode
 import com.metrolist.shared.ui.statistics.epochRange
 import com.metrolist.shared.ui.statistics.matchingStatisticsAlbum
 import com.metrolist.shared.ui.statistics.statisticsMediaItem
+import com.metrolist.shared.ui.wrapped.WrappedScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
+import org.koin.compose.koinInject
 
 @Composable
 fun StatsScreen() {
@@ -85,6 +93,18 @@ fun StatsScreen() {
     val artistThumbnails = remember { mutableStateMapOf<String, String?>() }
     val artistIds = remember { mutableStateMapOf<String, String>() }
     var artistFallbacks by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    var showWrapped by rememberSaveable { mutableStateOf(false) }
+    if (showWrapped) {
+        WrappedScreen(
+            database = koinInject<MusicDatabase>(),
+            playbackController = LocalPlaybackController.current,
+            onBack = { showWrapped = false },
+            onExport = { saveImage(it, exportLabel, "metrolist-wrapped.png") },
+            exportLabel = exportLabel,
+            desktopLayout = true,
+        )
+        return
+    }
 
     LaunchedEffect(period, mode, dateRange, refreshKey) {
         isLoading = true
@@ -95,27 +115,36 @@ fun StatsScreen() {
         var refreshArtistLookups = false
         try {
             val (sinceMs, untilMs) = period.epochRange(dateRange, mode = mode)
-            val snapshot = withContext(Dispatchers.IO) { HistoryRepository.getStatisticsSnapshot(sinceMs, untilMs) }
-            val songs = snapshot.songs
-            val artists = snapshot.artists
-            val albums = snapshot.albums
-            val totals = snapshot.totals
-            topSongs = songs
-            songItems = snapshot.songItems.associateBy { it.id }
-            topArtists = artists
-            refreshArtistLookups = true
-            artistFallbacks =
-                topArtists.associate { artist ->
-                    artist.name to snapshot.songs.firstOrNull { it.artists.contains(artist.name) }?.thumbnailUrl
-                }
-            topAlbums = albums
-            artistCount = artists.size
-            albumCount = albums.size
-            totalScrobbles = totals.playCount
-            totalTimeMs = totals.playTimeMs
-            dailyStats = snapshot.daily.associate { it.bucket to it.playCount }
-            hourlyStats = snapshot.hourly.associate { it.bucket.toInt() to it.playCount }
-            hasLoaded = true
+
+            fun show(snapshot: HistoryStatisticsSnapshot) {
+                val songs = snapshot.songs
+                val artists = snapshot.artists
+                val albums = snapshot.albums
+                val totals = snapshot.totals
+                topSongs = songs
+                songItems = snapshot.songItems.associateBy { it.id }
+                topArtists = artists
+                artistFallbacks =
+                    topArtists.associate { artist ->
+                        artist.name to snapshot.songs.firstOrNull { it.artists.contains(artist.name) }?.thumbnailUrl
+                    }
+                topAlbums = albums
+                artistCount = artists.size
+                albumCount = albums.size
+                totalScrobbles = totals.playCount
+                totalTimeMs = totals.playTimeMs
+                dailyStats = snapshot.daily.associate { it.bucket to it.playCount }
+                hourlyStats = snapshot.hourly.associate { it.bucket.toInt() to it.playCount }
+                hasLoaded = true
+                isLoading = false
+                artistLookupGeneration++
+            }
+            show(withContext(Dispatchers.IO) { HistoryRepository.getStatisticsSnapshot(sinceMs, untilMs) })
+            // Last.fm can take a while for long periods, so local numbers show first.
+            val lastFm = LastFmHistoryCache.listens(sinceMs, untilMs)
+            if (lastFm.isNotEmpty()) {
+                show(withContext(Dispatchers.IO) { HistoryRepository.getStatisticsSnapshot(sinceMs, untilMs, lastFm) })
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -154,6 +183,7 @@ fun StatsScreen() {
         }
     }
     StatisticsScreen(
+        onOpenWrapped = { showWrapped = true },
         exportLabel = exportLabel,
         onExport = { saveImage(it, exportLabel, "metrolist-statistics.png") },
         modifier = Modifier.cursorContextMenu(songMenu, openOnSecondaryClick = false),
@@ -177,6 +207,7 @@ fun StatsScreen() {
                             rankedTitle = "${index + 1}. ${item.title}",
                             subtitle = statisticsPlayCountDuration(item.playCount, item.playTimeMs),
                             thumbnailUrl = item.thumbnailUrl,
+                            isClickable = item.isPlayable,
                         )
                     },
                 albums =
@@ -239,7 +270,8 @@ fun StatsScreen() {
                 }
             }
         },
-        onItemMenu = { item ->
+        onItemMenu = menu@{ item ->
+            if (item.id.startsWith("track:") && !item.isClickable) return@menu
             menuJob?.cancel()
             menuJob =
                 scope.launch {

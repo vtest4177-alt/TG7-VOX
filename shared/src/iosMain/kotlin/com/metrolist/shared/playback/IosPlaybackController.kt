@@ -21,6 +21,7 @@ import com.metrolist.shared.model.RepeatMode
 import com.metrolist.shared.model.SongItem
 import com.metrolist.shared.model.buildRadioQueueRecommendations
 import com.metrolist.shared.model.canSwitchToMusicVideo
+import com.metrolist.shared.model.isNonMusicalVideo
 import com.metrolist.shared.model.isPodcast
 import com.metrolist.shared.model.isVideoSong
 import com.metrolist.shared.model.selectRadioQueueChip
@@ -62,6 +63,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -90,12 +92,21 @@ import platform.UIKit.UIApplicationDidEnterBackgroundNotification
 import platform.UIKit.UIApplicationWillTerminateNotification
 import platform.UIKit.UIBackgroundTaskIdentifier
 import platform.UIKit.UIBackgroundTaskInvalid
+import platform.UIKit.UIDevice
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 private const val RELATED_SONGS_LIMIT = 20
+
+// AVFoundation plays Opus-in-MP4 only from iOS 17; iOS 16 decodes the remuxed asset as silence.
+private val iosOpusRemuxSupported: Boolean =
+    (
+        UIDevice.currentDevice.systemVersion
+            .substringBefore('.')
+            .toIntOrNull() ?: 0
+    ) >= 17
 
 internal class IosPlaybackController(
     private val player: MusicPlayer,
@@ -112,12 +123,17 @@ internal class IosPlaybackController(
 ) : PlaybackController {
     override val supportsVideoPlayback = true
     override val supportsCasting = false
+    override val playbackVolume = player.volume
     override val canSkipNext: Boolean
         get() = !guestLocked && state.value.canSkipNext(allowSuggestions = !isFiniteQueue || canAutoLoadMore)
     override val canSkipPrevious: Boolean
         get() = !guestLocked && state.value.canSkipPrevious
 
     private var listenTogether: ListenTogetherManager? = null
+    private val wrappedSharedPlayback = MutableStateFlow(false)
+    override val wrappedSoundtrackAllowed = wrappedSharedPlayback.map { !it }
+    override val playbackCommandGeneration: Long get() = player.playbackCommands.value
+    override val playbackCommands = player.playbackCommands
     private val guestLocked: Boolean get() = listenTogether?.isGuestPlaybackLocked == true
     private val inListenTogether: Boolean get() = listenTogether?.isInRoom?.value == true
 
@@ -125,6 +141,11 @@ internal class IosPlaybackController(
         listenTogether = manager
         player.isListenTogetherGuest = { manager.isGuestPlaybackLocked }
         player.isListenTogetherActive = { manager.isInRoom.value }
+        scope.launch {
+            combine(manager.isInRoom, manager.roomRequestPending, manager.persistedRoomSession) { active, pending, persisted ->
+                active || pending || persisted
+            }.collect { wrappedSharedPlayback.value = it }
+        }
         scope.launch {
             combine(manager.role, manager.isInRoom) { _, active -> active }.collect { active ->
                 if (active) {
@@ -498,6 +519,7 @@ internal class IosPlaybackController(
                             iosPlaybackAudioQuality(Settings.shared.audioQuality),
                             refresh = true,
                             forceAac = audioRecovery.forceAac(song.id),
+                            allowOpusRemux = iosOpusRemuxSupported,
                         ) { quality, _, allowHls ->
                             resolver.resolveRemote(
                                 song.id,
@@ -632,7 +654,9 @@ internal class IosPlaybackController(
                 if (enabled) {
                     val song = player.currentSong.value ?: return@collect
                     try {
-                        audioStorage?.getCachedPlaybackResource(song)?.let { player.analyzeSilenceFromCache(song, it) }
+                        audioStorage?.getCachedPlaybackResource(song, allowOpusRemux = iosOpusRemuxSupported)?.let {
+                            player.analyzeSilenceFromCache(song, it)
+                        }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (error: Exception) {
@@ -976,8 +1000,11 @@ internal class IosPlaybackController(
     ) {
         val songs = queue.ifEmpty { listOf(song) }
         val index = songs.indexOfFirst { it === song }.takeIf { it >= 0 } ?: songs.indexOf(song).coerceAtLeast(0)
-        play(song, queue, songsOnly, index)
+        play(song, if (song.startsRadio) queue else songs, songsOnly, index)
     }
+
+    // Podcast episodes and local files have no YouTube radio, so they stay a finite single-item queue.
+    private val SongItem.startsRadio: Boolean get() = !isPodcast && !isLocal && !id.startsWith("local_")
 
     private fun play(
         song: SongItem,
@@ -993,7 +1020,7 @@ internal class IosPlaybackController(
         recommendationsSongsOnly = songsOnly
         isFiniteQueue = queue.isNotEmpty()
         val selectedSong = requestPlayback(song, songs, index, startPlaying = localSongChangeStartsPlayback(), shuffle = shuffle) ?: return
-        if (queue.size <= 1) bootstrapRecommendations(selectedSong.id)
+        if (queue.size <= 1 && selectedSong.startsRadio) bootstrapRecommendations(selectedSong.id)
     }
 
     override fun playQueue(
@@ -1747,10 +1774,10 @@ internal class IosPlaybackController(
             logIosPlaybackError("Failed to record local play for ${song.id}", error)
             Logger.w("IosPlaybackController", "Failed to record local play id=${song.id}")
         }
-        if (Settings.shared.classicRecommendations) recordRelatedSongs(song.id)
+        if (Settings.shared.useLocalHomeRecommendations) recordRelatedSongs(song.id)
     }
 
-    /** Stores the songs YouTube relates to [songId], feeding the classic local Quick picks. */
+    /** Stores the songs YouTube relates to [songId] for history-based Quick picks. */
     private suspend fun recordRelatedSongs(songId: String) {
         // Local files have no YouTube watch id, so their relations cannot be fetched.
         if (songId.startsWith("local_")) return
@@ -1760,7 +1787,7 @@ internal class IosPlaybackController(
             val related =
                 repository()
                     .startRadio(songId)
-                    .filter { it.id.isNotBlank() && it.id != songId }
+                    .filter { it.id.isNotBlank() && it.id != songId && !it.isNonMusicalVideo && !it.isPodcast }
                     .distinctBy { it.id }
                     .take(RELATED_SONGS_LIMIT)
             if (related.isEmpty()) return
@@ -1973,7 +2000,9 @@ internal class IosPlaybackController(
             val storage = audioStorage ?: return
             storage.cacheSong(song, resource)
             if (Settings.shared.skipSilence) {
-                storage.getCachedPlaybackResource(song)?.let { player.analyzeSilenceFromCache(song, it) }
+                storage.getCachedPlaybackResource(song, allowOpusRemux = iosOpusRemuxSupported)?.let {
+                    player.analyzeSilenceFromCache(song, it)
+                }
             }
         } catch (error: CancellationException) {
             throw error
@@ -2005,7 +2034,7 @@ internal class IosPlaybackController(
         val excludedProfiles = audioRecovery.excludedProfiles(song.id)
         if (!skipCachedAudio && !refresh && excludedProfiles.isEmpty()) {
             try {
-                audioStorage?.getCachedPlaybackResource(song)?.let { return it }
+                audioStorage?.getCachedPlaybackResource(song, allowOpusRemux = iosOpusRemuxSupported)?.let { return it }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -2018,6 +2047,7 @@ internal class IosPlaybackController(
             quality,
             refresh = refresh,
             forceAac = audioRecovery.forceAac(song.id),
+            allowOpusRemux = iosOpusRemuxSupported,
         ) { requestedQuality, isRefresh, allowHls ->
             val hints =
                 song.toContentHints(wantVideo = false).withIosAudioCapabilities(allowHls)

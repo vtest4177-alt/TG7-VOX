@@ -13,6 +13,7 @@ import com.metrolist.shared.playback.SleepTimerState
 import com.metrolist.shared.youtube.playback.PlaybackResource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 
 enum class PlaybackError {
     STREAM_UNAVAILABLE,
@@ -65,6 +66,10 @@ data class PlaybackUiState(
 
 interface PlaybackController {
     val state: StateFlow<PlaybackUiState>
+    val wrappedSoundtrackAllowed: Flow<Boolean> get() = flowOf(false)
+    val playbackVolume: StateFlow<Float>? get() = null
+    val playbackCommandGeneration: Long get() = 0L
+    val playbackCommands: Flow<Long> get() = flowOf(0L)
     val listState: Flow<PlaybackListState> get() = state.listStates()
     val canSkipNext: Boolean get() = state.value.canSkipNext()
     val canSkipPrevious: Boolean get() = state.value.canSkipPrevious
@@ -79,16 +84,17 @@ interface PlaybackController {
 
     fun currentPositionMs(): Long = state.value.positionMs
 
+    // An empty queue marks a lone song, which Android follows with its radio.
     fun play(
         song: SongItem,
-        queue: List<SongItem> = listOf(song),
+        queue: List<SongItem> = emptyList(),
         songsOnly: Boolean = false,
     )
 
     fun playAtGeneration(
         expectedGeneration: Long,
         song: SongItem,
-        queue: List<SongItem> = listOf(song),
+        queue: List<SongItem> = emptyList(),
         songsOnly: Boolean = false,
     ) {
         if (explicitPlaybackGeneration == expectedGeneration) play(song, queue, songsOnly)
