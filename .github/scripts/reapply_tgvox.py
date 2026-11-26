@@ -69,6 +69,8 @@ def patch_strings(cfg: dict) -> None:
         ("settings_check_releases_summary", f"Check GitHub for a newer {app_name} release"),
         ("crash_imminent_title", f"{app_name} is about to crash"),
         ("discord_error_gateway_configuration", f"Discord rejected the connection configuration. Update {app_name} before trying again."),
+        ("appearance_app_icon_credit", f"Custom {app_name} icons by {dev_name}"),
+        ("app_icon_metromallow", f"{app_name} Glow"),
     ]
     for p in all_string_files:
         if not p.exists():
@@ -114,6 +116,25 @@ def patch_manifest(cfg: dict) -> None:
         if text != orig:
             p.write_text(text, encoding="utf-8")
             print(f"Patched {rel}")
+
+
+def patch_icon_utils(cfg: dict) -> None:
+    for p in ROOT.rglob("IconUtils.kt"):
+        text = p.read_text(encoding="utf-8")
+        orig = text
+        text = re.sub(
+            r'previewRes\s*=\s*R\.drawable\.[A-Za-z0-9_]+',
+            'previewRes = R.drawable.tgvox_app_icon_full',
+            text,
+        )
+        text = re.sub(
+            r'\n[ \t]*previewBackgroundRes\s*=\s*R\.drawable\.[A-Za-z0-9_]+,?',
+            '',
+            text,
+        )
+        if text != orig:
+            p.write_text(text, encoding="utf-8")
+            print(f"Patched {p.relative_to(ROOT)}")
 
 
 def patch_about(cfg: dict) -> None:
@@ -440,19 +461,22 @@ def patch_splash(cfg: dict) -> None:
         "import androidx.compose.foundation.Canvas",
         "import androidx.compose.foundation.Image",
         "import androidx.compose.foundation.background",
-        "import androidx.compose.foundation.border",
         "import androidx.compose.foundation.clickable",
         "import androidx.compose.foundation.interaction.MutableInteractionSource",
-        "import androidx.compose.foundation.layout.padding",
+        "import androidx.compose.foundation.layout.Row",
+        "import androidx.compose.foundation.layout.Spacer",
         "import androidx.compose.foundation.layout.size",
-        "import androidx.compose.foundation.shape.RoundedCornerShape",
+        "import androidx.compose.foundation.layout.width",
+        "import androidx.compose.foundation.shape.CircleShape",
         "import androidx.compose.runtime.Composable",
         "import androidx.compose.runtime.LaunchedEffect",
         "import androidx.compose.runtime.saveable.rememberSaveable",
         "import androidx.compose.ui.draw.clip",
         "import androidx.compose.ui.geometry.Offset",
-        "import androidx.compose.ui.graphics.Brush",
+        "import androidx.compose.ui.geometry.Size",
         "import androidx.compose.ui.graphics.Color",
+        "import androidx.compose.ui.graphics.ImageBitmap",
+        "import androidx.compose.ui.graphics.StrokeCap",
         "import androidx.compose.ui.graphics.asImageBitmap",
         "import androidx.compose.ui.graphics.drawscope.Stroke",
         "import androidx.compose.ui.graphics.graphicsLayer",
@@ -462,10 +486,195 @@ def patch_splash(cfg: dict) -> None:
         "import androidx.compose.ui.unit.sp",
         "import androidx.compose.ui.zIndex",
         "import androidx.core.content.ContextCompat",
+        "import kotlinx.coroutines.Dispatchers",
+        "import kotlinx.coroutines.delay",
+        "import kotlinx.coroutines.withContext",
         "import kotlin.math.PI",
         "import kotlin.math.cos",
         "import kotlin.math.sin",
     ]
+    splash_fn = """
+
+// TGVOX_SPLASH_V2
+@Composable
+private fun TgVoxPremiumSplashOverlay(
+    appName: String,
+    onFinished: () -> Unit,
+) {
+    val context = LocalContext.current
+    var logoBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    val progress = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        logoBitmap =
+            withContext(Dispatchers.Default) {
+                runCatching {
+                    val drawable =
+                        ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
+                            ?: context.packageManager.getApplicationIcon(context.packageName)
+                    val sizePx = 256
+                    val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+                    val androidCanvas = android.graphics.Canvas(bitmap)
+                    drawable.setBounds(0, 0, sizePx, sizePx)
+                    drawable.draw(androidCanvas)
+                    bitmap.asImageBitmap()
+                }.getOrNull()
+            }
+        delay(90L)
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 2450, easing = LinearEasing),
+        )
+        onFinished()
+    }
+
+    val metrics = remember { FloatArray(2) }
+    val interactionSource = remember { MutableInteractionSource() }
+
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .zIndex(99f)
+                .graphicsLayer {
+                    val t = progress.value
+                    val exitEase = FastOutSlowInEasing.transform(((t - 0.86f) / 0.14f).coerceIn(0f, 1f))
+                    alpha = 1f - exitEase
+                    val exitScale = 1f + 0.025f * exitEase
+                    scaleX = exitScale
+                    scaleY = exitScale
+                }.background(Color.Black)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = {},
+                ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val t = progress.value
+            if (t <= 0.58f) {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val dotAppear = FastOutSlowInEasing.transform((t / 0.14f).coerceIn(0f, 1f))
+                val orbitSpin = FastOutSlowInEasing.transform(((t - 0.02f) / 0.42f).coerceIn(0f, 1f))
+                val converge = FastOutSlowInEasing.transform(((t - 0.24f) / 0.20f).coerceIn(0f, 1f))
+                val dotFadeOut = 1f - FastOutSlowInEasing.transform(((t - 0.35f) / 0.10f).coerceIn(0f, 1f))
+                val dotAlpha = dotAppear * dotFadeOut
+
+                val orbitPx = 46.dp.toPx() * (0.65f + 0.35f * dotAppear) * (1f - converge)
+                val dotRadius = 6.2.dp.toPx() * (0.45f + 0.55f * dotAppear) * (1f - 0.30f * converge)
+                val baseAngle = -35f + orbitSpin * 400f
+
+                if (dotAlpha > 0.01f) {
+                    val arcSpan = (54f * orbitSpin * (1f - converge)).coerceAtLeast(0f)
+                    for (i in 0 until 3) {
+                        val headDeg = baseAngle + i * 120f
+                        if (arcSpan > 2f && orbitPx > 3.dp.toPx()) {
+                            drawArc(
+                                color = Color.White.copy(alpha = 0.34f * dotAlpha * (1f - converge)),
+                                startAngle = headDeg - arcSpan,
+                                sweepAngle = arcSpan,
+                                useCenter = false,
+                                topLeft = Offset(center.x - orbitPx, center.y - orbitPx),
+                                size = Size(orbitPx * 2f, orbitPx * 2f),
+                                style = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round),
+                            )
+                        }
+                        val rad = headDeg * (PI / 180.0)
+                        val pos =
+                            Offset(
+                                x = center.x + (orbitPx * cos(rad)).toFloat(),
+                                y = center.y + (orbitPx * sin(rad)).toFloat(),
+                            )
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.18f * dotAlpha),
+                            radius = dotRadius * 2.15f,
+                            center = pos,
+                        )
+                        drawCircle(
+                            color = Color.White.copy(alpha = dotAlpha),
+                            radius = dotRadius,
+                            center = pos,
+                        )
+                    }
+                }
+
+                val ringT = ((t - 0.35f) / 0.22f).coerceIn(0f, 1f)
+                if (ringT > 0.01f && ringT < 0.99f) {
+                    val ringEase = FastOutSlowInEasing.transform(ringT)
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.32f * (1f - ringEase)),
+                        radius = 16.dp.toPx() + 56.dp.toPx() * ringEase,
+                        center = center,
+                        style = Stroke(width = 2.dp.toPx() * (1f - 0.6f * ringEase)),
+                    )
+                }
+            }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier =
+                Modifier.onGloballyPositioned { coords ->
+                    metrics[0] = coords.size.width.toFloat()
+                },
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(72.dp)
+                        .onGloballyPositioned { coords ->
+                            metrics[1] = coords.size.width.toFloat()
+                        }.graphicsLayer {
+                            val t = progress.value
+                            val logoReveal = FastOutSlowInEasing.transform(((t - 0.36f) / 0.20f).coerceIn(0f, 1f))
+                            val slideLeft = FastOutSlowInEasing.transform(((t - 0.56f) / 0.22f).coerceIn(0f, 1f))
+                            val centerOffset = ((metrics[0] - metrics[1]) * 0.5f).coerceAtLeast(0f)
+                            val popScale =
+                                if (logoReveal <= 0f) {
+                                    0.38f
+                                } else {
+                                    0.38f + 0.62f * logoReveal + 0.04f * sin(logoReveal * PI.toFloat())
+                                }
+                            alpha = logoReveal
+                            scaleX = popScale
+                            scaleY = popScale
+                            translationX = (1f - slideLeft) * centerOffset
+                        }.clip(CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                val bmp = logoBitmap
+                if (bmp != null) {
+                    Image(
+                        bitmap = bmp,
+                        contentDescription = appName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Text(
+                text = appName,
+                color = Color.White,
+                fontSize = 31.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp,
+                maxLines = 1,
+                modifier =
+                    Modifier.graphicsLayer {
+                        val t = progress.value
+                        val wordReveal = FastOutSlowInEasing.transform(((t - 0.58f) / 0.20f).coerceIn(0f, 1f))
+                        alpha = wordReveal
+                        translationX = (1f - wordReveal) * (-18.dp.toPx())
+                    },
+            )
+        }
+    }
+}
+"""
     for p in ROOT.rglob("MainActivity.kt"):
         text = p.read_text(encoding="utf-8")
         orig = text
@@ -483,6 +692,13 @@ def patch_splash(cfg: dict) -> None:
                 rf'\1"{safe_app}"',
                 text,
             )
+            if "// TGVOX_SPLASH_V2" not in text:
+                text = re.sub(
+                    r"\n*(?://\s*TGVOX_SPLASH_V\d+\s*\n)?@Composable\s*\nprivate fun TgVoxPremiumSplashOverlay\([\s\S]*$",
+                    splash_fn,
+                    text,
+                    count=1,
+                )
             if text != orig:
                 p.write_text(text, encoding="utf-8")
                 print(f"Patched {p.relative_to(ROOT)}")
@@ -505,216 +721,6 @@ def patch_splash(cfg: dict) -> None:
                 "                    }\n"
             )
             text = re.sub(box_anchor, lambda m, oc=overlay_call: f"{m.group(1)}{oc}{m.group(2)}", text, count=1)
-            splash_fn = """
-
-@Composable
-private fun TgVoxPremiumSplashOverlay(
-    appName: String,
-    onFinished: () -> Unit,
-) {
-    val context = LocalContext.current
-    val logoBitmap =
-        remember(context) {
-            runCatching {
-                val drawable =
-                    ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
-                        ?: context.packageManager.getApplicationIcon(context.packageName)
-                val sizePx = 384
-                val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-                val androidCanvas = android.graphics.Canvas(bitmap)
-                drawable.setBounds(0, 0, sizePx, sizePx)
-                drawable.draw(androidCanvas)
-                bitmap.asImageBitmap()
-            }.getOrNull()
-        }
-
-    val progress = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        progress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(durationMillis = 2650, easing = LinearEasing),
-        )
-        onFinished()
-    }
-
-    val t = progress.value
-    val dotAppear = FastOutSlowInEasing.transform((t / 0.16f).coerceIn(0f, 1f))
-    val spreadIn = FastOutSlowInEasing.transform(((t - 0.04f) / 0.18f).coerceIn(0f, 1f))
-    val spinEase = FastOutSlowInEasing.transform(((t - 0.08f) / 0.66f).coerceIn(0f, 1f))
-    val converge = FastOutSlowInEasing.transform(((t - 0.52f) / 0.24f).coerceIn(0f, 1f))
-    val logoReveal = FastOutSlowInEasing.transform(((t - 0.62f) / 0.20f).coerceIn(0f, 1f))
-    val labelReveal = FastOutSlowInEasing.transform(((t - 0.72f) / 0.14f).coerceIn(0f, 1f))
-    val exitEase = FastOutSlowInEasing.transform(((t - 0.90f) / 0.10f).coerceIn(0f, 1f))
-
-    val overlayAlpha = 1f - exitEase
-    val overlayScale = 1f + 0.03f * exitEase
-    val burstProgress = ((t - 0.60f) / 0.26f).coerceIn(0f, 1f)
-    val burstEase = FastOutSlowInEasing.transform(burstProgress)
-
-    val dotAlpha = dotAppear * (1f - FastOutSlowInEasing.transform(((t - 0.64f) / 0.12f).coerceIn(0f, 1f)))
-    val orbitAngleDeg = spinEase * 540f
-    val logoScale =
-        if (logoReveal <= 0f) {
-            0.52f
-        } else {
-            0.52f + 0.48f * logoReveal + 0.035f * sin(logoReveal * PI.toFloat())
-        }
-
-    val interactionSource = remember { MutableInteractionSource() }
-
-    Box(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .zIndex(99f)
-                .graphicsLayer {
-                    alpha = overlayAlpha
-                    scaleX = overlayScale
-                    scaleY = overlayScale
-                }.background(
-                    Brush.radialGradient(
-                        colors = listOf(Color(0xFF0D1833), Color(0xFF060A16), Color(0xFF03050B)),
-                    ),
-                ).clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = {},
-                ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val center = Offset(size.width / 2f, size.height / 2f)
-            val maxOrbitPx = 42.dp.toPx()
-            val orbitPx = maxOrbitPx * spreadIn * (1f - converge)
-            val baseDotPx = (8.5.dp.toPx() * (0.4f + 0.6f * dotAppear)) * (1f - 0.35f * converge)
-
-            val ambientGlowRadius =
-                (150.dp.toPx() * (0.65f + 0.35f * dotAppear.coerceAtLeast(logoReveal))).coerceAtLeast(1f)
-            drawCircle(
-                brush =
-                    Brush.radialGradient(
-                        colors = listOf(Color(0x3338BDF8), Color(0x1834D399), Color.Transparent),
-                        center = center,
-                        radius = ambientGlowRadius,
-                    ),
-                radius = ambientGlowRadius,
-                center = center,
-            )
-
-            if (orbitPx > 2f && dotAlpha > 0.01f) {
-                drawCircle(
-                    color = Color(0xFF94A3B8).copy(alpha = 0.14f * dotAlpha * (1f - converge)),
-                    radius = orbitPx,
-                    center = center,
-                    style = Stroke(width = 1.2.dp.toPx()),
-                )
-            }
-
-            if (dotAlpha > 0.01f) {
-                val dotColors = listOf(Color(0xFF38BDF8), Color(0xFF34D399), Color(0xFF818CF8))
-                for (i in 0 until 3) {
-                    val dotColor = dotColors[i]
-                    for (trail in 2 downTo 0) {
-                        val trailFade = if (trail == 0) 1f else if (trail == 1) 0.32f else 0.14f
-                        val angleRad = ((orbitAngleDeg + i * 120f - trail * 13f) * PI / 180.0)
-                        val pos =
-                            Offset(
-                                x = center.x + (orbitPx * cos(angleRad)).toFloat(),
-                                y = center.y + (orbitPx * sin(angleRad)).toFloat(),
-                            )
-                        val r = (baseDotPx * (1f - trail * 0.22f)).coerceAtLeast(1f)
-                        val haloR = (r * 3.4f).coerceAtLeast(1f)
-                        drawCircle(
-                            brush =
-                                Brush.radialGradient(
-                                    colors =
-                                        listOf(
-                                            dotColor.copy(alpha = 0.42f * dotAlpha * trailFade),
-                                            dotColor.copy(alpha = 0.14f * dotAlpha * trailFade),
-                                            Color.Transparent,
-                                        ),
-                                    center = pos,
-                                    radius = haloR,
-                                ),
-                            radius = haloR,
-                            center = pos,
-                        )
-                        drawCircle(
-                            color = dotColor.copy(alpha = 0.92f * dotAlpha * trailFade),
-                            radius = r,
-                            center = pos,
-                        )
-                        if (trail == 0) {
-                            drawCircle(
-                                color = Color.White.copy(alpha = 0.72f * dotAlpha),
-                                radius = (r * 0.42f).coerceAtLeast(0.5f),
-                                center = pos,
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (burstProgress > 0.01f && burstProgress < 0.99f) {
-                val ringRadius = (18.dp.toPx() + 86.dp.toPx() * burstEase).coerceAtLeast(1f)
-                val ringAlpha = (1f - burstEase) * 0.55f
-                drawCircle(
-                    color = Color(0xFF38BDF8).copy(alpha = ringAlpha),
-                    radius = ringRadius,
-                    center = center,
-                    style = Stroke(width = (2.5.dp.toPx() * (1f - burstEase * 0.6f)).coerceAtLeast(0.5f)),
-                )
-            }
-        }
-
-        Box(
-            modifier =
-                Modifier
-                    .size(106.dp)
-                    .graphicsLayer {
-                        alpha = logoReveal
-                        scaleX = logoScale
-                        scaleY = logoScale
-                    }.clip(RoundedCornerShape(28.dp))
-                    .background(Color(0xFF0B1222))
-                    .border(
-                        width = 1.dp,
-                        brush =
-                            Brush.linearGradient(
-                                colors = listOf(Color(0x8838BDF8), Color(0x5534D399), Color(0x66818CF8)),
-                            ),
-                        shape = RoundedCornerShape(28.dp),
-                    ),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (logoBitmap != null) {
-                Image(
-                    bitmap = logoBitmap,
-                    contentDescription = appName,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(28.dp)),
-                )
-            }
-        }
-
-        Text(
-            text = appName.uppercase(),
-            color = Color(0xFFF8FAFC).copy(alpha = labelReveal),
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 5.sp,
-            modifier =
-                Modifier
-                    .align(Alignment.Center)
-                    .padding(top = 160.dp)
-                    .graphicsLayer {
-                        alpha = labelReveal
-                        translationY = (1f - labelReveal) * 10.dp.toPx()
-                    },
-        )
-    }
-}
-"""
             text = text.rstrip() + splash_fn
         if text != orig:
             p.write_text(text, encoding="utf-8")
@@ -727,6 +733,7 @@ def main() -> None:
     if target_mode != "ios-only":
         patch_gradle(cfg)
         patch_manifest(cfg)
+        patch_icon_utils(cfg)
         patch_splash(cfg)
     patch_strings(cfg)
     patch_about(cfg)

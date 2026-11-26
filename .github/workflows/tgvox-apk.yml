@@ -21,6 +21,7 @@ on:
       - 'docs/**'
       - '**/*.md'
       - '.github/tgvox-upstream-sha'
+      - '.github/tgvox-last-sync-at'
       - '.github/workflows/tgvox-auto-sync.yml'
 
 concurrency:
@@ -156,9 +157,23 @@ jobs:
             exit 1
           fi
           cp "$BUILT_APK" "dist/TG-VOX.apk"
+          cat > "$RUNNER_TEMP/release-notes.md" << EOF_NOTES
+          ## TG VOX v${VER_NAME}
+
+          ### What is New in This Update
+          - **Zero-Lag OLED Intro Animation**: Pure #000000 startup sequence with 3 crisp orbiting white dots that swirl and lock into the TG VOX logo & wordmark at smooth 60/120fps.
+          - **Complete TG VOX Icon Coverage**: Replaced notification status-bar icon (ic_notification), Android 13+ Material You monochrome icon, and Settings -> Change App Icon picker previews.
+          - **Resilient In-App OTA Updater**: 90-second read timeout with 4x HTTP Range-resume retries so updates complete reliably over mobile or Wi-Fi.
+          - **Upstream Metrolist Core & Security**: Full R8 release (~14.9 MB) signed with your persistent keystore so playlists, history, and login stay safe on update.
+          EOF_NOTES
+          sed -i.bak 's/^          //' "$RUNNER_TEMP/release-notes.md" && rm -f "$RUNNER_TEMP/release-notes.md.bak"
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" \
               --title "TG VOX $RELEASE_TAG" \
-              --notes "Automated TG VOX ($VER_NAME) Android Release build with full TG VOX branding & fixed signing key."
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          else
+            gh release edit "$RELEASE_TAG" \
+              --title "TG VOX $RELEASE_TAG" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
           fi
           gh release upload "$RELEASE_TAG" "dist/TG-VOX.apk" --clobber

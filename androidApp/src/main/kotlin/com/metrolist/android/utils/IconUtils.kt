@@ -36,54 +36,48 @@ enum class AppIcon(
     ORIGINAL(
         aliasName = "MainActivityOriginal",
         labelRes = Res.string.app_icon_original,
-        previewRes = R.drawable.ic_launcher_foreground,
-        previewBackgroundRes = R.drawable.app_icon_original_background,
+        previewRes = R.drawable.tgvox_app_icon_full,
         enabledByDefault = true,
     ),
     ARCTIC_HAZE(
         aliasName = "MainActivityArcticHaze",
         labelRes = Res.string.app_icon_arctic_haze,
-        previewRes = R.drawable.app_icon_arctic_haze_foreground,
-        previewBackgroundRes = R.drawable.app_icon_arctic_haze_background,
+        previewRes = R.drawable.tgvox_app_icon_full,
     ),
     LAVENDER_LEAP(
         aliasName = "MainActivityLavenderLeap",
         labelRes = Res.string.app_icon_lavender_leap,
-        previewRes = R.drawable.app_icon_lavender_leap_foreground,
-        previewBackgroundRes = R.drawable.app_icon_lavender_leap_background,
+        previewRes = R.drawable.tgvox_app_icon_full,
     ),
     METROMALLOW(
         aliasName = "MainActivityMetromallow",
         labelRes = Res.string.app_icon_metromallow,
-        previewRes = R.drawable.app_icon_metromallow_foreground,
-        previewBackgroundRes = R.drawable.app_icon_metromallow_background,
+        previewRes = R.drawable.tgvox_app_icon_full,
     ),
     PRIDE_SPECIAL(
         aliasName = "MainActivityPrideSpecial",
         labelRes = Res.string.app_icon_pride_special,
-        previewRes = R.drawable.app_icon_pride_special_foreground,
-        previewBackgroundRes = R.drawable.app_icon_pride_special_background,
+        previewRes = R.drawable.tgvox_app_icon_full,
     ),
     STATIC(
         aliasName = "MainActivityKayeStatic",
         labelRes = Res.string.app_icon_static,
-        previewRes = R.drawable.app_icon_static_foreground,
-        previewBackgroundRes = R.drawable.app_icon_static_background,
+        previewRes = R.drawable.tgvox_app_icon_full,
     ),
     ZENITH_BLACK(
         aliasName = "MainActivityZenithBlack",
         labelRes = Res.string.app_icon_zenith_black,
-        previewRes = R.drawable.app_icon_zenith_black_full,
+        previewRes = R.drawable.tgvox_app_icon_full,
     ),
     ZENITH_WHITE(
         aliasName = "MainActivityZenithWhite",
         labelRes = Res.string.app_icon_zenith_white,
-        previewRes = R.drawable.app_icon_zenith_white_full,
+        previewRes = R.drawable.tgvox_app_icon_full,
     ),
     GRADIENT(
         aliasName = "MainActivityGradient",
         labelRes = Res.string.app_icon_gradient,
-        previewRes = R.drawable.app_icon_gradient_full,
+        previewRes = R.drawable.tgvox_app_icon_full,
     ),
     ;
 

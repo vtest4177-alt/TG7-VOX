@@ -34,6 +34,19 @@ jobs:
         id: sync_step
         run: |
           set -euo pipefail
+          if [ "${{ inputs.force_sync }}" != "true" ] && [ -f ".github/tgvox-last-sync-at" ]; then
+            LAST_SYNC_TS=$(tr -d '\r\n[:space:]' < .github/tgvox-last-sync-at || true)
+            if echo "$LAST_SYNC_TS" | grep -Eq '^[0-9]+$'; then
+              NOW_TS=$(date +%s)
+              DAYS_SINCE=$(( (NOW_TS - LAST_SYNC_TS) / 86400 ))
+              if [ "$DAYS_SINCE" -lt 20 ]; then
+                echo "3-week cooldown active ($DAYS_SINCE/21 days elapsed). Skipping auto-sync."
+                echo "updated=false" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+          fi
+
           UPSTREAM_URL="https://github.com/MetrolistGroup/Metrolist.git"
           LATEST_UPSTREAM_SHA=$(git ls-remote "$UPSTREAM_URL" "refs/heads/main" | awk '{print $1}')
           LAST_SYNCED_SHA=""
@@ -70,8 +83,11 @@ jobs:
 
           for res_dir in androidApp/src/main/res app/src/main/res; do
             if [ -d "$res_dir" ]; then
-              mkdir -p "$KEEP_DIR/$res_dir"
+              mkdir -p "$KEEP_DIR/$res_dir/drawable" "$KEEP_DIR/$res_dir/drawable-nodpi"
               cp -R "$res_dir"/mipmap-* "$KEEP_DIR/$res_dir/" 2>/dev/null || true
+              [ -f "$res_dir/drawable/ic_notification.xml" ] && cp "$res_dir/drawable/ic_notification.xml" "$KEEP_DIR/$res_dir/drawable/ic_notification.xml"
+              [ -f "$res_dir/drawable/ic_launcher_monochrome.xml" ] && cp "$res_dir/drawable/ic_launcher_monochrome.xml" "$KEEP_DIR/$res_dir/drawable/ic_launcher_monochrome.xml"
+              [ -f "$res_dir/drawable-nodpi/tgvox_app_icon_full.png" ] && cp "$res_dir/drawable-nodpi/tgvox_app_icon_full.png" "$KEEP_DIR/$res_dir/drawable-nodpi/tgvox_app_icon_full.png"
             fi
           done
           if [ -f "iosApp/Assets.xcassets/AppIcon.appiconset/AppIcon.png" ]; then
@@ -91,6 +107,7 @@ jobs:
           cp -R "$KEEP_DIR"/. .
           python3 .github/scripts/reapply_tgvox.py
           echo "$LATEST_UPSTREAM_SHA" > .github/tgvox-upstream-sha
+          date +%s > .github/tgvox-last-sync-at
 
           BASE_VER=$(grep -E '^appVersion=' gradle.properties | head -n1 | cut -d= -f2 | tr -d '\r\n' || true)
           [ -z "$BASE_VER" ] && BASE_VER="14.0.1"

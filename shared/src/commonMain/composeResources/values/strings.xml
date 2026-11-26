@@ -985,7 +985,7 @@
     <!-- Translators: Option or section label for app icon in the Appearance settings. -->
     <string name="appearance_app_icon">App icon</string>
     <!-- Translators: Option or section label for app icon credit in the Appearance settings. -->
-    <string name="appearance_app_icon_credit">Alternate icons by Kayé (@thy_k on Discord)</string>
+    <string name="appearance_app_icon_credit">Custom TG VOX icons by TG7 ERROR</string>
     <!-- Translators: Option or section label for material you in the settings. -->
     <string name="material_you" translatable="false">Material You</string>
     <!-- Translators: Supporting text beneath the material you option in the settings. -->
@@ -1025,7 +1025,7 @@
     <!-- Translators: Label for app icon lavender leap in the Android app. -->
     <string name="app_icon_lavender_leap">Lavender Leap</string>
     <!-- Translators: Label for app icon metromallow in the Android app. -->
-    <string name="app_icon_metromallow">Metromallow</string>
+    <string name="app_icon_metromallow">TG VOX Glow</string>
     <!-- Translators: Label for app icon pride special in the Android app. -->
     <string name="app_icon_pride_special">Pride Special</string>
     <!-- Translators: Label for app icon static in the Android app. -->
