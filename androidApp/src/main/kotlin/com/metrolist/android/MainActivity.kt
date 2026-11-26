@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.os.Trace
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.Composable
 import android.graphics.Bitmap
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing

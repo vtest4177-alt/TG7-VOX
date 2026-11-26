@@ -446,6 +446,7 @@ def patch_splash(cfg: dict) -> None:
         "import androidx.compose.foundation.layout.padding",
         "import androidx.compose.foundation.layout.size",
         "import androidx.compose.foundation.shape.RoundedCornerShape",
+        "import androidx.compose.runtime.Composable",
         "import androidx.compose.runtime.LaunchedEffect",
         "import androidx.compose.runtime.saveable.rememberSaveable",
         "import androidx.compose.ui.draw.clip",
@@ -468,6 +469,14 @@ def patch_splash(cfg: dict) -> None:
     for p in ROOT.rglob("MainActivity.kt"):
         text = p.read_text(encoding="utf-8")
         orig = text
+        missing = [imp for imp in required_imports if imp not in text]
+        if missing:
+            text = re.sub(
+                r"(import androidx\.activity\.ComponentActivity\n)",
+                lambda m, block="\n".join(missing): f"{m.group(1)}{block}\n",
+                text,
+                count=1,
+            )
         if "TgVoxPremiumSplashOverlay" in text:
             text = re.sub(
                 r'(TgVoxPremiumSplashOverlay\(\s*\n\s*appName\s*=\s*)"[^"]*"',
@@ -478,14 +487,6 @@ def patch_splash(cfg: dict) -> None:
                 p.write_text(text, encoding="utf-8")
                 print(f"Patched {p.relative_to(ROOT)}")
             continue
-        missing = [imp for imp in required_imports if imp not in text]
-        if missing:
-            text = re.sub(
-                r"(import androidx\.activity\.ComponentActivity\n)",
-                lambda m, block="\n".join(missing): f"{m.group(1)}{block}\n",
-                text,
-                count=1,
-            )
         state_anchor = r"(var onboardingComplete by remember \{ mutableStateOf\(app\.onboardingManager\.isComplete\) \})"
         box_anchor = r"(\n\s*onboardingComplete = true\n\s*\},\n\s*\)\n\s*\}\n\s*\}\n\s*\}\n)(\s*\}\n\s*\}\n\s*\}\n\s*\}\n\s*\n\s*private fun endStartupTrace)"
         if re.search(state_anchor, text) and re.search(box_anchor, text):
