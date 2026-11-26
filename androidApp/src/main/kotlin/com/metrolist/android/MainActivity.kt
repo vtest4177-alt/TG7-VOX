@@ -9,6 +9,37 @@ import android.os.SystemClock
 import android.os.Trace
 import android.util.Log
 import androidx.activity.ComponentActivity
+import android.graphics.Bitmap
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import androidx.core.content.ContextCompat
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
@@ -308,6 +339,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 val app = application as App
                 var onboardingComplete by remember { mutableStateOf(app.onboardingManager.isComplete) }
+                var showPremiumSplash by rememberSaveable { mutableStateOf(true) }
                 Box(Modifier.fillMaxSize().onGloballyPositioned { startupPresentation.contentLaidOut = true }) {
                     if (onboardingComplete) {
                         MetrolistApp(
@@ -343,6 +375,12 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
+                    }
+                    if (showPremiumSplash) {
+                        TgVoxPremiumSplashOverlay(
+                            appName = "TG VOX",
+                            onFinished = { showPremiumSplash = false },
+                        )
                     }
                 }
             }
@@ -403,5 +441,213 @@ class MainActivity : ComponentActivity() {
             incomingIntentState.value = null
             setIntent(Intent(this, MainActivity::class.java))
         }
+    }
+}
+
+@Composable
+private fun TgVoxPremiumSplashOverlay(
+    appName: String,
+    onFinished: () -> Unit,
+) {
+    val context = LocalContext.current
+    val logoBitmap =
+        remember(context) {
+            runCatching {
+                val drawable =
+                    ContextCompat.getDrawable(context, R.mipmap.ic_launcher)
+                        ?: context.packageManager.getApplicationIcon(context.packageName)
+                val sizePx = 384
+                val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+                val androidCanvas = android.graphics.Canvas(bitmap)
+                drawable.setBounds(0, 0, sizePx, sizePx)
+                drawable.draw(androidCanvas)
+                bitmap.asImageBitmap()
+            }.getOrNull()
+        }
+
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 2650, easing = LinearEasing),
+        )
+        onFinished()
+    }
+
+    val t = progress.value
+    val dotAppear = FastOutSlowInEasing.transform((t / 0.16f).coerceIn(0f, 1f))
+    val spreadIn = FastOutSlowInEasing.transform(((t - 0.04f) / 0.18f).coerceIn(0f, 1f))
+    val spinEase = FastOutSlowInEasing.transform(((t - 0.08f) / 0.66f).coerceIn(0f, 1f))
+    val converge = FastOutSlowInEasing.transform(((t - 0.52f) / 0.24f).coerceIn(0f, 1f))
+    val logoReveal = FastOutSlowInEasing.transform(((t - 0.62f) / 0.20f).coerceIn(0f, 1f))
+    val labelReveal = FastOutSlowInEasing.transform(((t - 0.72f) / 0.14f).coerceIn(0f, 1f))
+    val exitEase = FastOutSlowInEasing.transform(((t - 0.90f) / 0.10f).coerceIn(0f, 1f))
+
+    val overlayAlpha = 1f - exitEase
+    val overlayScale = 1f + 0.03f * exitEase
+    val burstProgress = ((t - 0.60f) / 0.26f).coerceIn(0f, 1f)
+    val burstEase = FastOutSlowInEasing.transform(burstProgress)
+
+    val dotAlpha = dotAppear * (1f - FastOutSlowInEasing.transform(((t - 0.64f) / 0.12f).coerceIn(0f, 1f)))
+    val orbitAngleDeg = spinEase * 540f
+    val logoScale =
+        if (logoReveal <= 0f) {
+            0.52f
+        } else {
+            0.52f + 0.48f * logoReveal + 0.035f * sin(logoReveal * PI.toFloat())
+        }
+
+    val interactionSource = remember { MutableInteractionSource() }
+
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .zIndex(99f)
+                .graphicsLayer {
+                    alpha = overlayAlpha
+                    scaleX = overlayScale
+                    scaleY = overlayScale
+                }.background(
+                    Brush.radialGradient(
+                        colors = listOf(Color(0xFF0D1833), Color(0xFF060A16), Color(0xFF03050B)),
+                    ),
+                ).clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = {},
+                ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2f, size.height / 2f)
+            val maxOrbitPx = 42.dp.toPx()
+            val orbitPx = maxOrbitPx * spreadIn * (1f - converge)
+            val baseDotPx = (8.5.dp.toPx() * (0.4f + 0.6f * dotAppear)) * (1f - 0.35f * converge)
+
+            val ambientGlowRadius =
+                (150.dp.toPx() * (0.65f + 0.35f * dotAppear.coerceAtLeast(logoReveal))).coerceAtLeast(1f)
+            drawCircle(
+                brush =
+                    Brush.radialGradient(
+                        colors = listOf(Color(0x3338BDF8), Color(0x1834D399), Color.Transparent),
+                        center = center,
+                        radius = ambientGlowRadius,
+                    ),
+                radius = ambientGlowRadius,
+                center = center,
+            )
+
+            if (orbitPx > 2f && dotAlpha > 0.01f) {
+                drawCircle(
+                    color = Color(0xFF94A3B8).copy(alpha = 0.14f * dotAlpha * (1f - converge)),
+                    radius = orbitPx,
+                    center = center,
+                    style = Stroke(width = 1.2.dp.toPx()),
+                )
+            }
+
+            if (dotAlpha > 0.01f) {
+                val dotColors = listOf(Color(0xFF38BDF8), Color(0xFF34D399), Color(0xFF818CF8))
+                for (i in 0 until 3) {
+                    val dotColor = dotColors[i]
+                    for (trail in 2 downTo 0) {
+                        val trailFade = if (trail == 0) 1f else if (trail == 1) 0.32f else 0.14f
+                        val angleRad = ((orbitAngleDeg + i * 120f - trail * 13f) * PI / 180.0)
+                        val pos =
+                            Offset(
+                                x = center.x + (orbitPx * cos(angleRad)).toFloat(),
+                                y = center.y + (orbitPx * sin(angleRad)).toFloat(),
+                            )
+                        val r = (baseDotPx * (1f - trail * 0.22f)).coerceAtLeast(1f)
+                        val haloR = (r * 3.4f).coerceAtLeast(1f)
+                        drawCircle(
+                            brush =
+                                Brush.radialGradient(
+                                    colors =
+                                        listOf(
+                                            dotColor.copy(alpha = 0.42f * dotAlpha * trailFade),
+                                            dotColor.copy(alpha = 0.14f * dotAlpha * trailFade),
+                                            Color.Transparent,
+                                        ),
+                                    center = pos,
+                                    radius = haloR,
+                                ),
+                            radius = haloR,
+                            center = pos,
+                        )
+                        drawCircle(
+                            color = dotColor.copy(alpha = 0.92f * dotAlpha * trailFade),
+                            radius = r,
+                            center = pos,
+                        )
+                        if (trail == 0) {
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.72f * dotAlpha),
+                                radius = (r * 0.42f).coerceAtLeast(0.5f),
+                                center = pos,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (burstProgress > 0.01f && burstProgress < 0.99f) {
+                val ringRadius = (18.dp.toPx() + 86.dp.toPx() * burstEase).coerceAtLeast(1f)
+                val ringAlpha = (1f - burstEase) * 0.55f
+                drawCircle(
+                    color = Color(0xFF38BDF8).copy(alpha = ringAlpha),
+                    radius = ringRadius,
+                    center = center,
+                    style = Stroke(width = (2.5.dp.toPx() * (1f - burstEase * 0.6f)).coerceAtLeast(0.5f)),
+                )
+            }
+        }
+
+        Box(
+            modifier =
+                Modifier
+                    .size(106.dp)
+                    .graphicsLayer {
+                        alpha = logoReveal
+                        scaleX = logoScale
+                        scaleY = logoScale
+                    }.clip(RoundedCornerShape(28.dp))
+                    .background(Color(0xFF0B1222))
+                    .border(
+                        width = 1.dp,
+                        brush =
+                            Brush.linearGradient(
+                                colors = listOf(Color(0x8838BDF8), Color(0x5534D399), Color(0x66818CF8)),
+                            ),
+                        shape = RoundedCornerShape(28.dp),
+                    ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (logoBitmap != null) {
+                Image(
+                    bitmap = logoBitmap,
+                    contentDescription = appName,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(28.dp)),
+                )
+            }
+        }
+
+        Text(
+            text = appName.uppercase(),
+            color = Color(0xFFF8FAFC).copy(alpha = labelReveal),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 5.sp,
+            modifier =
+                Modifier
+                    .align(Alignment.Center)
+                    .padding(top = 160.dp)
+                    .graphicsLayer {
+                        alpha = labelReveal
+                        translationY = (1f - labelReveal) * 10.dp.toPx()
+                    },
+        )
     }
 }

@@ -12,5 +12,6 @@
   "upstreamBranch": "main",
   "targetMode": "android-only",
   "enableGithubReleases": true,
-  "enableInAppForkUpdater": true
+  "enableInAppForkUpdater": true,
+  "enablePremiumSplash": true
 }
